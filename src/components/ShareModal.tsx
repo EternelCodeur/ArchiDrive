@@ -1,0 +1,176 @@
+import { useState } from "react";
+import { X, Users, Building, Shield, Globe, Calendar } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SharePermissions, ShareTarget } from "@/types";
+import { toast } from "sonner";
+
+interface ShareModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  folderName: string;
+  folderId: number;
+}
+
+export const ShareModal = ({
+  isOpen,
+  onClose,
+  folderName,
+  folderId,
+}: ShareModalProps) => {
+  const [shareTarget, setShareTarget] = useState<ShareTarget["type"]>("user");
+  const [permissions, setPermissions] = useState<SharePermissions>({
+    read: true,
+    write: false,
+    delete: false,
+  });
+  const [expirationDate, setExpirationDate] = useState("");
+
+  const handleShare = () => {
+    // Simulate API call
+    console.log("Sharing folder:", {
+      folderId,
+      shareTarget,
+      permissions,
+      expirationDate,
+    });
+    
+    toast.success("Partage effectué avec succès !", {
+      description: `Le dossier "${folderName}" a été partagé.`,
+    });
+    
+    onClose();
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Partager le dossier</DialogTitle>
+          <DialogDescription>
+            Gérez les droits d'accès pour "{folderName}"
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          {/* Share target selection */}
+          <div className="space-y-3">
+            <Label>Partager avec</Label>
+            <RadioGroup value={shareTarget} onValueChange={(value) => setShareTarget(value as ShareTarget["type"])}>
+              <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-accent cursor-pointer">
+                <RadioGroupItem value="user" id="user" />
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <Label htmlFor="user" className="cursor-pointer flex-1">
+                  Utilisateur spécifique
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-accent cursor-pointer">
+                <RadioGroupItem value="service" id="service" />
+                <Building className="w-4 h-4 text-muted-foreground" />
+                <Label htmlFor="service" className="cursor-pointer flex-1">
+                  Service
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-accent cursor-pointer">
+                <RadioGroupItem value="role" id="role" />
+                <Shield className="w-4 h-4 text-muted-foreground" />
+                <Label htmlFor="role" className="cursor-pointer flex-1">
+                  Rôle
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-accent cursor-pointer">
+                <RadioGroupItem value="all" id="all" />
+                <Globe className="w-4 h-4 text-muted-foreground" />
+                <Label htmlFor="all" className="cursor-pointer flex-1">
+                  Tous les utilisateurs
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          {/* Permissions */}
+          <div className="space-y-3">
+            <Label>Droits d'accès</Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="read"
+                  checked={permissions.read}
+                  onCheckedChange={(checked) =>
+                    setPermissions({ ...permissions, read: !!checked })
+                  }
+                />
+                <Label htmlFor="read" className="cursor-pointer">
+                  👁️ Lecture
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="write"
+                  checked={permissions.write}
+                  onCheckedChange={(checked) =>
+                    setPermissions({ ...permissions, write: !!checked })
+                  }
+                />
+                <Label htmlFor="write" className="cursor-pointer">
+                  ✍️ Écriture
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="delete"
+                  checked={permissions.delete}
+                  onCheckedChange={(checked) =>
+                    setPermissions({ ...permissions, delete: !!checked })
+                  }
+                />
+                <Label htmlFor="delete" className="cursor-pointer">
+                  🗑️ Suppression
+                </Label>
+              </div>
+            </div>
+          </div>
+
+          {/* Expiration date */}
+          <div className="space-y-2">
+            <Label htmlFor="expiration">Date d'expiration (optionnel)</Label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                id="expiration"
+                type="date"
+                value={expirationDate}
+                onChange={(e) => setExpirationDate(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Annuler
+          </Button>
+          <Button onClick={handleShare}>
+            Partager
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};

@@ -57,6 +57,16 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        folder: {
+          hover: "hsl(var(--folder-hover))",
+        },
+        tab: {
+          active: "hsl(var(--tab-active))",
+          inactive: "hsl(var(--tab-inactive))",
+        },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

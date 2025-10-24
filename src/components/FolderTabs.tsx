@@ -1,0 +1,68 @@
+import { X } from "lucide-react";
+import { OpenTab } from "@/types";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { FolderView } from "./FolderView";
+
+interface FolderTabsProps {
+  tabs: OpenTab[];
+  activeTab: string;
+  onTabChange: (tabId: string) => void;
+  onTabClose: (tabId: number) => void;
+  onFolderClick: (folderId: number) => void;
+}
+
+export const FolderTabs = ({
+  tabs,
+  activeTab,
+  onTabChange,
+  onTabClose,
+  onFolderClick,
+}: FolderTabsProps) => {
+  if (tabs.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-muted/20">
+        <div className="text-center space-y-3">
+          <h3 className="text-xl font-semibold">Bienvenue dans votre espace documentaire</h3>
+          <p className="text-muted-foreground">
+            Sélectionnez un dossier dans la barre latérale pour commencer
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col">
+      <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0 gap-0">
+        {tabs.map((tab) => (
+          <TabsTrigger
+            key={tab.id}
+            value={tab.id.toString()}
+            className="relative rounded-none border-r border-border data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-b-primary px-4 py-3 gap-2"
+          >
+            <span className="max-w-[150px] truncate">{tab.folderName}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onTabClose(tab.id);
+              }}
+              className="ml-2 hover:bg-muted rounded-sm p-0.5 transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      {tabs.map((tab) => (
+        <TabsContent
+          key={tab.id}
+          value={tab.id.toString()}
+          className="flex-1 m-0 data-[state=inactive]:hidden"
+        >
+          <FolderView folderId={tab.folderId} onFolderClick={onFolderClick} />
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+};
