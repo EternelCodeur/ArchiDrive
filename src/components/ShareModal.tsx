@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Users, Building, Shield, Globe, Calendar } from "lucide-react";
+import { X, Users, Building, Shield, Globe, Calendar, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,8 +12,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SharePermissions, ShareTarget } from "@/types";
+import { SharePermissions, ShareTarget, SharedAccess } from "@/types";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -35,26 +37,46 @@ export const ShareModal = ({
     delete: false,
   });
   const [expirationDate, setExpirationDate] = useState("");
+  const [notify, setNotify] = useState(true);
+  const [sharedAccesses, setSharedAccesses] = useState<SharedAccess[]>([
+    {
+      id: 1,
+      target_type: "service",
+      target_name: "Ressources Humaines",
+      permissions: { read: true, write: true, delete: false },
+      created_at: "2024-01-15"
+    }
+  ]);
 
   const handleShare = () => {
-    // Simulate API call
-    console.log("Sharing folder:", {
-      folderId,
-      shareTarget,
+    const newAccess: SharedAccess = {
+      id: sharedAccesses.length + 1,
+      target_type: shareTarget,
+      target_name: shareTarget === "all" ? "Tous les utilisateurs" : "Nouveau partage",
       permissions,
-      expirationDate,
-    });
+      expires_at: expirationDate || undefined,
+      created_at: new Date().toISOString().split('T')[0]
+    };
+    
+    setSharedAccesses([...sharedAccesses, newAccess]);
     
     toast.success("Partage effectué avec succès !", {
-      description: `Le dossier "${folderName}" a été partagé.`,
+      description: `Le dossier "${folderName}" a été partagé. ${notify ? "Les destinataires ont été notifiés." : ""}`,
     });
     
-    onClose();
+    // Reset form
+    setPermissions({ read: true, write: false, delete: false });
+    setExpirationDate("");
+  };
+
+  const handleRevoke = (accessId: number) => {
+    setSharedAccesses(sharedAccesses.filter(a => a.id !== accessId));
+    toast.success("Accès révoqué");
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Partager le dossier</DialogTitle>
           <DialogDescription>
@@ -160,6 +182,60 @@ export const ShareModal = ({
               />
             </div>
           </div>
+
+          {/* Notify option */}
+          <div className="flex items-center justify-between p-3 rounded-lg border">
+            <Label htmlFor="notify" className="cursor-pointer">
+              Notifier les destinataires par email
+            </Label>
+            <Switch
+              id="notify"
+              checked={notify}
+              onCheckedChange={setNotify}
+            />
+          </div>
+
+          {/* Current shared accesses */}
+          {sharedAccesses.length > 0 && (
+            <div className="space-y-2">
+              <Label>Accès actuels</Label>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {sharedAccesses.map((access) => (
+                  <div key={access.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm">{access.target_name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {access.target_type === 'user' && 'Utilisateur'}
+                          {access.target_type === 'service' && 'Service'}
+                          {access.target_type === 'role' && 'Rôle'}
+                          {access.target_type === 'all' && 'Tous'}
+                        </Badge>
+                      </div>
+                      <div className="flex gap-2 text-xs text-muted-foreground">
+                        {access.permissions.read && <span>👁️ Lecture</span>}
+                        {access.permissions.write && <span>✍️ Écriture</span>}
+                        {access.permissions.delete && <span>🗑️ Suppression</span>}
+                      </div>
+                      {access.expires_at && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Expire le {new Date(access.expires_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRevoke(access.id)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2">

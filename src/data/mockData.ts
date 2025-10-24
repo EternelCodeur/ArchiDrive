@@ -1,19 +1,49 @@
-import { Folder, Document } from "@/types";
+import { Folder, Document, Enterprise, Service, User, SharedAccess } from "@/types";
+
+export const mockEnterprises: Enterprise[] = [
+  { id: 1, name: "TechCorp Solutions" }
+];
+
+export const mockServices: Service[] = [
+  { id: 1, name: "Ressources Humaines", enterprise_id: 1 },
+  { id: 2, name: "Comptabilité", enterprise_id: 1 },
+  { id: 3, name: "Direction", enterprise_id: 1 },
+  { id: 4, name: "Marketing", enterprise_id: 1 }
+];
+
+export const mockUsers: User[] = [
+  { id: 1, name: "Marie Dubois", email: "marie.dubois@techcorp.fr", role: "dg", service_id: null, enterprise_id: 1 },
+  { id: 2, name: "Jean Martin", email: "jean.martin@techcorp.fr", role: "manager", service_id: 1, enterprise_id: 1 },
+  { id: 3, name: "Sophie Bernard", email: "sophie.bernard@techcorp.fr", role: "employee", service_id: 1, enterprise_id: 1 }
+];
 
 export const mockFolders: Folder[] = [
-  { id: 1, name: "Ressources Humaines", parent_id: null, shared: true },
-  { id: 2, name: "Comptabilité", parent_id: null, shared: false },
-  { id: 3, name: "Direction", parent_id: null, shared: true },
-  { id: 4, name: "Congés", parent_id: 1 },
-  { id: 5, name: "Salaires", parent_id: 1 },
-  { id: 6, name: "Recrutement", parent_id: 1 },
-  { id: 7, name: "Factures 2024", parent_id: 2 },
-  { id: 8, name: "Budget", parent_id: 2 },
-  { id: 9, name: "Rapports", parent_id: 3 },
-  { id: 10, name: "Congés annuels", parent_id: 4 },
-  { id: 11, name: "Congés maladie", parent_id: 4 },
-  { id: 12, name: "Janvier 2024", parent_id: 7 },
-  { id: 13, name: "Février 2024", parent_id: 7 },
+  // Dossier partagé accessible à tous
+  { id: 1, name: "📢 Dossier Partagé", parent_id: null, service_id: null, shared: true, is_shared_folder: true },
+  
+  // Dossiers RH
+  { id: 2, name: "Ressources Humaines", parent_id: null, service_id: 1, shared: false },
+  { id: 3, name: "Congés", parent_id: 2, service_id: 1 },
+  { id: 4, name: "Salaires", parent_id: 2, service_id: 1 },
+  { id: 5, name: "Recrutement", parent_id: 2, service_id: 1 },
+  { id: 6, name: "Congés annuels", parent_id: 3, service_id: 1 },
+  { id: 7, name: "Congés maladie", parent_id: 3, service_id: 1 },
+  
+  // Dossiers Comptabilité
+  { id: 8, name: "Comptabilité", parent_id: null, service_id: 2, shared: false },
+  { id: 9, name: "Factures 2024", parent_id: 8, service_id: 2 },
+  { id: 10, name: "Budget", parent_id: 8, service_id: 2 },
+  { id: 11, name: "Janvier 2024", parent_id: 9, service_id: 2 },
+  { id: 12, name: "Février 2024", parent_id: 9, service_id: 2 },
+  
+  // Dossiers Direction
+  { id: 13, name: "Direction", parent_id: null, service_id: 3, shared: true },
+  { id: 14, name: "Rapports", parent_id: 13, service_id: 3 },
+  { id: 15, name: "Stratégie", parent_id: 13, service_id: 3 },
+  
+  // Dossiers Marketing
+  { id: 16, name: "Marketing", parent_id: null, service_id: 4, shared: false },
+  { id: 17, name: "Campagnes", parent_id: 16, service_id: 4 }
 ];
 
 export const mockDocuments: Document[] = [

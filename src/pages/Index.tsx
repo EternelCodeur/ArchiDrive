@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { FolderTabs } from "@/components/FolderTabs";
+import { Header } from "@/components/Header";
 import { OpenTab } from "@/types";
 import { getFolderById } from "@/data/mockData";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 const Index = () => {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
@@ -12,7 +14,6 @@ const Index = () => {
   const handleFolderClick = (folderId: number) => {
     setCurrentFolderId(folderId);
     
-    // Check if tab already exists
     const existingTab = openTabs.find((tab) => tab.folderId === folderId);
     
     if (existingTab) {
@@ -36,7 +37,6 @@ const Index = () => {
     const updatedTabs = openTabs.filter((tab) => tab.id !== tabId);
     setOpenTabs(updatedTabs);
     
-    // If closing active tab, switch to previous or first tab
     if (activeTabId === tabId.toString()) {
       if (updatedTabs.length > 0) {
         setActiveTabId(updatedTabs[updatedTabs.length - 1].id.toString());
@@ -48,19 +48,25 @@ const Index = () => {
   };
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden">
-      <Sidebar onFolderClick={handleFolderClick} currentFolderId={currentFolderId} />
-      
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <FolderTabs
-          tabs={openTabs}
-          activeTab={activeTabId}
-          onTabChange={setActiveTabId}
-          onTabClose={handleTabClose}
-          onFolderClick={handleFolderClick}
-        />
-      </main>
-    </div>
+    <AuthProvider>
+      <div className="min-h-screen flex flex-col w-full bg-background">
+        <Header />
+        
+        <div className="flex-1 flex w-full overflow-hidden">
+          <Sidebar onFolderClick={handleFolderClick} currentFolderId={currentFolderId} />
+          
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <FolderTabs
+              tabs={openTabs}
+              activeTab={activeTabId}
+              onTabChange={setActiveTabId}
+              onTabClose={handleTabClose}
+              onFolderClick={handleFolderClick}
+            />
+          </div>
+        </div>
+      </div>
+    </AuthProvider>
   );
 };
 
