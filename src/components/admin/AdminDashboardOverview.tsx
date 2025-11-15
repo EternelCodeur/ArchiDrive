@@ -81,21 +81,7 @@ export const AdminDashboardOverview = ({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">{(totalStorage + extraStorage).toFixed(1)} Go</p>
-            <p className="text-xs mt-1 opacity-90 mb-3">Capacité allouée (simulation)</p>
-            <form onSubmit={handleAddStorage} className="flex items-center gap-2 text-xs">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                value={storageInput}
-                onChange={(e) => setStorageInput(e.target.value)}
-                placeholder="Ajouter des Go"
-                className="h-8 w-24 bg-white/80 border-white/60 text-xs"
-              />
-              <Button type="submit" variant="outline" size="sm" className="h-8 px-3 text-xs bg-white/80">
-                Ajouter
-              </Button>
-            </form>
+            <p className="text-xs mt-1 opacity-90 mb-3">Capacité allouée</p>
           </CardContent>
         </Card>
       </div>
