@@ -114,3 +114,16 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Responsive base font-size for mobile */
+@media (max-width: 768px) {
+  html {
+    font-size: 87.5%; /* ~14px */
+  }
+}
+
+@media (max-width: 360px) {
+  html {
+    font-size: 81.25%; /* ~13px */
+  }
+}

@@ -1,16 +1,28 @@
-import { FileText, Download } from "lucide-react";
+import { FileText, Eye, MoreVertical, Share2, CheckSquare, Pencil } from "lucide-react";
 import { Document } from "@/types";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface FileItemProps {
   document: Document;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  onView?: () => void;
+  onShare?: () => void;
+   onRename?: () => void;
 }
 
 const getFileIcon = (type: string) => {
   return <FileText className="w-5 h-5 text-primary" />;
 };
 
-export const FileItem = ({ document }: FileItemProps) => {
+export const FileItem = ({ document, selectionMode, selected, onToggleSelect, onView, onShare, onRename }: FileItemProps) => {
   return (
     <div className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/30 hover:bg-accent/50 transition-all group">
       <div className="flex-shrink-0 w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
@@ -30,13 +42,44 @@ export const FileItem = ({ document }: FileItemProps) => {
         </div>
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        <Download className="w-4 h-4" />
-      </Button>
+      {selectionMode ? (
+        <Button
+          variant={selected ? "default" : "outline"}
+          size="icon"
+          className="transition-colors"
+          type="button"
+          onClick={onToggleSelect}
+        >
+          <CheckSquare className="w-4 h-4" />
+        </Button>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              type="button"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onView}>
+              <Eye className="w-4 h-4 mr-2" />
+              Voir
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onShare}>
+              <Share2 className="w-4 h-4 mr-2" />
+              Partager
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onRename}>
+              <Pencil className="w-4 h-4 mr-2" />
+              Renommer
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 };

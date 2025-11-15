@@ -1,8 +1,11 @@
-export type UserRole = 'dg' | 'manager' | 'employee';
+export type UserRole = 'agent' | 'admin' | 'super_admin';
 
 export interface Enterprise {
   id: number;
   name: string;
+  adminName?: string;
+  storage?: number; // en Go
+  email?: string;
 }
 
 export interface Service {

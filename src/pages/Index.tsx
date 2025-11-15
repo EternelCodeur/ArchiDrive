@@ -4,12 +4,15 @@ import { FolderTabs } from "@/components/FolderTabs";
 import { Header } from "@/components/Header";
 import { OpenTab } from "@/types";
 import { getFolderById } from "@/data/mockData";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { FolderTree } from "@/components/FolderTree";
 
 const Index = () => {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>("");
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [collapseFolderId, setCollapseFolderId] = useState<number | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
 
   const handleFolderClick = (folderId: number) => {
     setCurrentFolderId(folderId);
@@ -34,6 +37,10 @@ const Index = () => {
   };
 
   const handleTabClose = (tabId: number) => {
+    const closedTab = openTabs.find((t) => t.id === tabId);
+    if (closedTab) {
+      setCollapseFolderId(closedTab.folderId);
+    }
     const updatedTabs = openTabs.filter((tab) => tab.id !== tabId);
     setOpenTabs(updatedTabs);
     
@@ -47,13 +54,21 @@ const Index = () => {
     }
   };
 
+  const handleCloseTabByFolderId = (folderId: number) => {
+    const tab = openTabs.find((t) => t.folderId === folderId);
+    if (tab) {
+      handleTabClose(tab.id);
+    }
+  };
+
   return (
-    <AuthProvider>
-      <div className="min-h-screen flex flex-col w-full bg-background">
-        <Header />
+    <div className="min-h-screen flex flex-col bg-background">
+        <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
         
-        <div className="flex-1 flex w-full overflow-hidden">
-          <Sidebar onFolderClick={handleFolderClick} currentFolderId={currentFolderId} />
+        <div className="flex-1 flex overflow-hidden">
+          <div className="hidden md:block">
+            <Sidebar onFolderClick={handleFolderClick} currentFolderId={currentFolderId} collapseFolderId={collapseFolderId} onCloseTabByFolderId={handleCloseTabByFolderId} />
+          </div>
           
           <div className="flex-1 flex flex-col overflow-hidden">
             <FolderTabs
@@ -65,9 +80,22 @@ const Index = () => {
             />
           </div>
         </div>
+
+        <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+          <SheetContent side="left" className="p-0">
+            <div className="h-full flex flex-col">
+              <div className="border-b px-4 h-16 flex items-center gap-2">
+                <img src="logo-archi.png" alt="ArchiDrive" className="h-6 w-6 object-contain" />
+                <span className="text-sm font-semibold tracking-tight">Navigation</span>
+              </div>
+              <div className="flex-1 overflow-y-auto px-2 py-4">
+                <FolderTree onFolderClick={(id) => { handleFolderClick(id); setMobileSidebarOpen(false); }} currentFolderId={currentFolderId} externalCollapseId={collapseFolderId} onCloseTabByFolderId={handleCloseTabByFolderId} />
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
-    </AuthProvider>
-  );
+    );
 };
 
 export default Index;

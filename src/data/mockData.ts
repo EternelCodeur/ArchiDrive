@@ -1,4 +1,4 @@
-import { Folder, Document, Enterprise, Service, User, SharedAccess } from "@/types";
+import { Folder, Document, Enterprise, Service, User } from "@/types";
 
 export const mockEnterprises: Enterprise[] = [
   { id: 1, name: "TechCorp Solutions" }
@@ -12,15 +12,12 @@ export const mockServices: Service[] = [
 ];
 
 export const mockUsers: User[] = [
-  { id: 1, name: "Marie Dubois", email: "marie.dubois@techcorp.fr", role: "dg", service_id: null, enterprise_id: 1 },
-  { id: 2, name: "Jean Martin", email: "jean.martin@techcorp.fr", role: "manager", service_id: 1, enterprise_id: 1 },
-  { id: 3, name: "Sophie Bernard", email: "sophie.bernard@techcorp.fr", role: "employee", service_id: 1, enterprise_id: 1 }
+  { id: 1, name: "Alice Agent", email: "agent@techcorp.fr", role: "agent", service_id: 1, enterprise_id: 1 },
+  { id: 2, name: "Andrew Admin", email: "admin@techcorp.fr", role: "admin", service_id: null, enterprise_id: 1 },
+  { id: 3, name: "Sam Super", email: "super@archidrive.io", role: "super_admin", service_id: null, enterprise_id: 1 }
 ];
 
 export const mockFolders: Folder[] = [
-  // Dossier partagé accessible à tous
-  { id: 1, name: "📢 Dossier Partagé", parent_id: null, service_id: null, shared: true, is_shared_folder: true },
-  
   // Dossiers RH
   { id: 2, name: "Ressources Humaines", parent_id: null, service_id: 1, shared: false },
   { id: 3, name: "Congés", parent_id: 2, service_id: 1 },

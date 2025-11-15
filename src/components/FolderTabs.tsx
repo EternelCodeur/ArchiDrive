@@ -33,12 +33,12 @@ export const FolderTabs = ({
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col">
-      <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0 gap-0">
+      <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0 gap-0 overflow-x-auto">
         {tabs.map((tab) => (
           <TabsTrigger
             key={tab.id}
             value={tab.id.toString()}
-            className="relative rounded-none border-r border-border data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-b-primary px-4 py-3 gap-2"
+            className="relative rounded-none border-r border-transparent hover:bg-muted/50 data-[state=active]:bg-card data-[state=active]:border-b-2 data-[state=active]:border-b-primary px-4 py-3 gap-2"
           >
             <span className="max-w-[150px] truncate">{tab.folderName}</span>
             <button

@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Upload, FolderPlus, Share2, Search } from "lucide-react";
+import { useState, useRef } from "react";
+import { Upload, FolderPlus, Search, CheckSquare, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { FolderItem } from "./FolderItem";
 import { FileItem } from "./FileItem";
 import { Breadcrumb } from "./Breadcrumb";
@@ -17,6 +18,20 @@ interface FolderViewProps {
 export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
+  const [shareDocumentId, setShareDocumentId] = useState<number | null>(null);
+  const [shareDocumentName, setShareDocumentName] = useState<string>("");
+  const [renamedDocuments, setRenamedDocuments] = useState<Record<number, string>>({});
+  const [renamedFolders, setRenamedFolders] = useState<Record<number, string>>({});
+  const [isRenameDocModalOpen, setIsRenameDocModalOpen] = useState(false);
+  const [isRenameFolderModalOpen, setIsRenameFolderModalOpen] = useState(false);
+  const [currentDocToRename, setCurrentDocToRename] = useState<{ id: number; name: string } | null>(null);
+  const [currentFolderToRename, setCurrentFolderToRename] = useState<{ id: number; name: string } | null>(null);
+  const [renameInput, setRenameInput] = useState("");
   
   const subfolders = getFoldersByParent(folderId);
   const documents = folderId ? getDocumentsByFolder(folderId) : [];
@@ -41,6 +56,113 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     });
   };
 
+  const handleCreateFolder = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newFolderName.trim();
+    if (!name) return;
+
+    toast.success(`Dossier "${name}" créé`, {
+      description: "Cette action est simulée côté interface pour l'instant.",
+    });
+
+    setNewFolderName("");
+    setIsCreateModalOpen(false);
+  };
+
+  const handleUploadClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (!files.length) return;
+
+    toast.success(`${files.length} fichier(s) sélectionné(s)`, {
+      description: "Les fichiers seront ajoutés au dossier (simulation).",
+    });
+
+    e.target.value = "";
+  };
+
+  const toggleDocumentSelection = (id: number) => {
+    setSelectedDocumentIds((prev) =>
+      prev.includes(id) ? prev.filter((docId) => docId !== id) : [...prev, id]
+    );
+  };
+
+  const handleViewDocument = (name: string) => {
+    toast.info(`Aperçu de "${name}"`, {
+      description: "La prévisualisation avancée sera ajoutée plus tard (simulation).",
+    });
+  };
+
+  const handleShareDocument = (id: number, name: string) => {
+    setShareDocumentId(id);
+    setShareDocumentName(name);
+    setIsShareModalOpen(true);
+  };
+
+  const openRenameDocument = (id: number, name: string) => {
+    setCurrentDocToRename({ id, name });
+    setRenameInput(renamedDocuments[id] ?? name);
+    setIsRenameDocModalOpen(true);
+  };
+
+  const openRenameFolder = (id: number, name: string) => {
+    setCurrentFolderToRename({ id, name });
+    setRenameInput(renamedFolders[id] ?? name);
+    setIsRenameFolderModalOpen(true);
+  };
+
+  const handleConfirmRenameDocument = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentDocToRename) return;
+    const value = renameInput.trim();
+    if (!value) return;
+
+    setRenamedDocuments((prev) => ({ ...prev, [currentDocToRename.id]: value }));
+    toast.success("Document renommé", {
+      description: `"${currentDocToRename.name}" est maintenant "${value}" (simulation).`,
+    });
+    setIsRenameDocModalOpen(false);
+    setCurrentDocToRename(null);
+  };
+
+  const handleConfirmRenameFolder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentFolderToRename) return;
+    const value = renameInput.trim();
+    if (!value) return;
+
+    setRenamedFolders((prev) => ({ ...prev, [currentFolderToRename.id]: value }));
+    toast.success("Dossier renommé", {
+      description: `"${currentFolderToRename.name}" est maintenant "${value}" (simulation).`,
+    });
+    setIsRenameFolderModalOpen(false);
+    setCurrentFolderToRename(null);
+  };
+
+  const handleDeleteFolder = (id: number, name: string) => {
+    toast.success("Dossier supprimé", {
+      description: `La suppression du dossier "${name}" est simulée pour l'instant.
+Vous pourrez brancher le backend plus tard.`,
+    });
+  };
+
+  const handleShareSelectedDocuments = () => {
+    if (selectedDocumentIds.length === 0) return;
+
+    setShareDocumentId(selectedDocumentIds[0]);
+    setShareDocumentName(
+      selectedDocumentIds.length === 1
+        ? documents.find((d) => d.id === selectedDocumentIds[0])?.name || "Document"
+        : `${selectedDocumentIds.length} documents sélectionnés`
+    );
+    setIsShareModalOpen(true);
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Header */}
@@ -58,21 +180,50 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
             </div>
             
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <FolderPlus className="w-4 h-4 mr-2" />
-                Nouveau dossier
-              </Button>
-              <Button variant="outline" size="sm">
-                <Upload className="w-4 h-4 mr-2" />
-                Téléverser
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => setIsCreateModalOpen(true)}
+              >
+                <FolderPlus className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Nouveau dossier</span>
               </Button>
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
-                onClick={() => setIsShareModalOpen(true)}
+                type="button"
+                onClick={handleUploadClick}
               >
-                <Share2 className="w-4 h-4 mr-2" />
-                Partager
+                <Upload className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Téléverser</span>
+              </Button>
+              <Button
+                variant={selectionMode ? "default" : "outline"}
+                size="sm"
+                type="button"
+                onClick={() => {
+                  if (!selectionMode) {
+                    setSelectionMode(true);
+                    setSelectedDocumentIds([]);
+                  } else if (selectedDocumentIds.length > 0) {
+                    handleShareSelectedDocuments();
+                  } else {
+                    setSelectionMode(false);
+                  }
+                }}
+              >
+                {selectionMode && selectedDocumentIds.length > 0 ? (
+                  <>
+                    <Share2 className="w-4 h-4 md:mr-2" />
+                    <span className="hidden md:inline">Partager</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckSquare className="w-4 h-4 md:mr-2" />
+                    <span className="hidden md:inline">Sélectionner</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -105,15 +256,14 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
             {/* Folders */}
             {subfolders.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                  Dossiers ({subfolders.length})
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                   {subfolders.map((folder) => (
                     <FolderItem
                       key={folder.id}
-                      folder={folder}
+                      folder={{ ...folder, name: renamedFolders[folder.id] ?? folder.name }}
                       onClick={() => onFolderClick(folder.id)}
+                      onRename={() => openRenameFolder(folder.id, folder.name)}
+                      onDelete={() => handleDeleteFolder(folder.id, folder.name)}
                     />
                   ))}
                 </div>
@@ -123,12 +273,18 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
             {/* Documents */}
             {documents.length > 0 && (
               <div>
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                  Documents ({documents.length})
-                </h2>
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 space-y-2">
                   {documents.map((doc) => (
-                    <FileItem key={doc.id} document={doc} />
+                    <FileItem
+                      key={doc.id}
+                      document={{ ...doc, name: renamedDocuments[doc.id] ?? doc.name }}
+                      selectionMode={selectionMode}
+                      selected={selectedDocumentIds.includes(doc.id)}
+                      onToggleSelect={() => toggleDocumentSelection(doc.id)}
+                      onView={() => handleViewDocument(renamedDocuments[doc.id] ?? doc.name)}
+                      onShare={() => handleShareDocument(doc.id, renamedDocuments[doc.id] ?? doc.name)}
+                      onRename={() => openRenameDocument(doc.id, doc.name)}
+                    />
                   ))}
                 </div>
               </div>
@@ -137,12 +293,94 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         )}
       </div>
 
-      {/* Share Modal */}
+      {/* Hidden file input for upload button */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {/* Create folder modal */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nouveau dossier</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateFolder} className="space-y-4">
+            <Input
+              autoFocus
+              placeholder="Nom du dossier"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+            />
+            <DialogFooter className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateModalOpen(false)}
+              >
+                Annuler
+              </Button>
+              <Button type="submit">Créer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename document modal */}
+      <Dialog open={isRenameDocModalOpen} onOpenChange={setIsRenameDocModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renommer le document</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleConfirmRenameDocument} className="space-y-4">
+            <Input
+              autoFocus
+              placeholder="Nouveau nom"
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+            />
+            <DialogFooter className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsRenameDocModalOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit">Renommer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename folder modal */}
+      <Dialog open={isRenameFolderModalOpen} onOpenChange={setIsRenameFolderModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renommer le dossier</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleConfirmRenameFolder} className="space-y-4">
+            <Input
+              autoFocus
+              placeholder="Nouveau nom"
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+            />
+            <DialogFooter className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsRenameFolderModalOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit">Renommer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share Modal (utilisée ici pour le partage de document) */}
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        folderName={path[path.length - 1]?.name || "Racine"}
-        folderId={folderId || 0}
+        folderName={shareDocumentName || path[path.length - 1]?.name || "Document"}
+        folderId={shareDocumentId || folderId || 0}
       />
     </div>
   );
