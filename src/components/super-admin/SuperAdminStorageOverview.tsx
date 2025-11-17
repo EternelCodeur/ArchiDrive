@@ -1,37 +1,103 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-interface SuperAdminStorageOverviewProps {
-  totalCapacity: number;
-  usedStorage: number;
+interface StorageOverviewApi {
+  id: number;
+  total_capacity: number;
+  used_storage: number;
 }
 
-export const SuperAdminStorageOverview = ({
-  totalCapacity,
-  usedStorage,
-}: SuperAdminStorageOverviewProps) => {
-  const [extraCapacity, setExtraCapacity] = useState(0);
-  const [capacityInput, setCapacityInput] = useState("");
+export const SuperAdminStorageOverview = () => {
+  const queryClient = useQueryClient();
+  const [totalCapacityInput, setTotalCapacityInput] = useState("0");
 
-  const effectiveCapacity = totalCapacity + extraCapacity;
+  const { data: overview, isLoading } = useQuery<StorageOverviewApi | null>({
+    queryKey: ["super-admin-storage-overview"],
+    queryFn: async () => {
+      const res = await fetch("/api/super-admin-storage-overviews");
+      if (!res.ok) {
+        throw new Error("Erreur lors du chargement du stockage global");
+      }
+      return res.json();
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (payload: { total_capacity: number }) => {
+      if (overview && overview.id) {
+        const res = await fetch(`/api/super-admin-storage-overviews/${overview.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            total_capacity: payload.total_capacity,
+            used_storage: overview.used_storage,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error("Erreur lors de la mise à jour du stockage global");
+        }
+        return res.json();
+      }
+
+      const res = await fetch(`/api/super-admin-storage-overviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          total_capacity: payload.total_capacity,
+          used_storage: 0,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la création du stockage global");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["super-admin-storage-overview"] });
+    },
+  });
+
+  const totalCapacity = overview?.total_capacity ?? 0;
+  const usedStorage = overview?.used_storage ?? 0;
+  const effectiveCapacity = totalCapacity || 1;
   const usedPercent = Math.min(100, Math.max(0, (usedStorage / effectiveCapacity) * 100));
 
-  const handleAddCapacity = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (overview) {
+      setTotalCapacityInput(overview.total_capacity.toString());
+    }
+  }, [overview]);
+
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const value = parseFloat(capacityInput.replace(",", "."));
-    if (isNaN(value) || value <= 0) {
-      toast.error("Veuillez saisir un nombre de Go valide.");
+    const totalValue = parseFloat(totalCapacityInput.replace(",", "."));
+    if (isLoading || mutation.isPending) {
+      return;
+    }
+    if (isNaN(totalValue) || totalValue < 0) {
+      toast.error("Veuillez saisir une capacité totale valide (>= 0).");
       return;
     }
 
-    setExtraCapacity((prev) => prev + value);
-    toast.success("Capacité ajoutée (simulation)", {
-      description: `Vous avez ajouté ${value} Go à la capacité globale de stockage.`,
-    });
-    setCapacityInput("");
+    mutation.mutate(
+      {
+        total_capacity: totalValue,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Stockage enregistré", {
+            description: "La configuration de stockage global a été mise à jour.",
+          });
+        },
+        onError: () => {
+          toast.error("Une erreur est survenue lors de l'enregistrement du stockage.");
+        },
+      },
+    );
   };
 
   return (
@@ -51,33 +117,43 @@ export const SuperAdminStorageOverview = ({
           <CardContent className="space-y-2 text-sm">
             <p>
               <span className="font-medium">Capacité totale : </span>
-              {effectiveCapacity.toFixed(1)} Go
+              {isLoading ? "Chargement..." : `${effectiveCapacity.toFixed(1)} Go`}
             </p>
             <p>
               <span className="font-medium">Utilisé : </span>
-              {usedStorage} Go ({usedPercent.toFixed(0)} %)
+              {isLoading ? "-" : `${usedStorage} Go (${usedPercent.toFixed(0)} %)`}
             </p>
             <p>
               <span className="font-medium">Restant : </span>
-              {Math.max(0, effectiveCapacity - usedStorage).toFixed(1)} Go
+              {isLoading ? "-" : `${Math.max(0, effectiveCapacity - usedStorage).toFixed(1)} Go`}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              Données simulées pour visualiser la répartition du stockage sur l'ensemble des
-              entreprises.
+              Configurez ici la capacité totale de stockage à l'échelle de l'application.
             </p>
-            <form onSubmit={handleAddCapacity} className="mt-3 flex items-center gap-2 text-xs">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                value={capacityInput}
-                onChange={(e) => setCapacityInput(e.target.value)}
-                placeholder="Ajouter des Go"
-                className="h-8 w-28 text-xs"
-              />
-              <Button type="submit" variant="outline" size="sm" className="h-8 px-3 text-xs">
-                Ajouter
-              </Button>
+            <form onSubmit={handleSave} className="mt-3 flex flex-col gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-32">Capacité totale (Go)</span>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={totalCapacityInput}
+                  onChange={(e) => setTotalCapacityInput(e.target.value)}
+                  className="h-8 w-32 text-xs"
+                  disabled={isLoading || mutation.isPending}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  disabled={isLoading || mutation.isPending}
+                >
+                  {mutation.isPending ? "Enregistrement..." : "Enregistrer"}
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>

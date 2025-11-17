@@ -1,9 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Menu, LayoutDashboard, Building2, Database } from "lucide-react";
+import { Menu, LayoutDashboard, Building2, Database, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type SuperAdminTab = "dashboard" | "enterprises" | "storage";
+export type SuperAdminTab = "dashboard" | "enterprises" | "storage" | "super_admins";
 
 interface SuperAdminSidebarProps {
   activeTab: SuperAdminTab;
@@ -56,7 +56,7 @@ export const SuperAdminSidebar = ({ activeTab, onChangeTab }: SuperAdminSidebarP
           onClick={() => onChangeTab("enterprises")}
         >
           <Building2 className="w-4 h-4" />
-          {!collapsed && <span>Gestion des entreprises</span>}
+          {!collapsed && <span>G des entreprises</span>}
         </Button>
         <Button
           variant={activeTab === "storage" ? "default" : "ghost"}
@@ -66,7 +66,17 @@ export const SuperAdminSidebar = ({ activeTab, onChangeTab }: SuperAdminSidebarP
           onClick={() => onChangeTab("storage")}
         >
           <Database className="w-4 h-4" />
-          {!collapsed && <span>Gestion du stockage</span>}
+          {!collapsed && <span>G du stockage</span>}
+        </Button>
+        <Button
+          variant={activeTab === "super_admins" ? "default" : "ghost"}
+          className={`w-full ${collapsed ? "justify-center" : "justify-start"} gap-2`}
+          size="sm"
+          type="button"
+          onClick={() => onChangeTab("super_admins")}
+        >
+          <Users className="w-4 h-4" />
+          {!collapsed && <span>G des super admin</span>}
         </Button>
       </div>
     </aside>

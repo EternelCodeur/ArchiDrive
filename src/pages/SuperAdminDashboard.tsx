@@ -7,6 +7,7 @@ import { Database } from "lucide-react";
 import { SuperAdminSidebar, SuperAdminTab } from "@/components/super-admin/SuperAdminSidebar";
 import { SuperAdminEnterprisesManagement } from "@/components/super-admin/SuperAdminEnterprisesManagement";
 import { SuperAdminStorageOverview } from "@/components/super-admin/SuperAdminStorageOverview";
+import { SuperAdminSuperAdminsManagement } from "@/components/super-admin/SuperAdminSuperAdminsManagement";
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<SuperAdminTab>("dashboard");
@@ -176,6 +177,19 @@ const SuperAdminDashboard = () => {
             </p>
           </div>
           <SuperAdminEnterprisesManagement />
+        </div>
+      );
+    }
+    if (activeTab === "super_admins") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Gestion des super administrateurs</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Créez, modifiez et supprimez les comptes super admin du tenant.
+            </p>
+          </div>
+          <SuperAdminSuperAdminsManagement />
         </div>
       );
     }
