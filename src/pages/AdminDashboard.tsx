@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockServices, mockUsers, mockDocuments, mockEnterprises } from "@/data/mockData";
+import { mockDocuments, mockEnterprises } from "@/data/mockData";
 import type { Service } from "@/types";
 import type { AdminEmployee } from "@/types/admin";
 import type { Permission } from "@/components/admin/AdminSettingsPermissions";
@@ -14,6 +14,10 @@ import { AdminServicesSection } from "@/components/admin/AdminServicesSection";
 import { AdminEmployeesSection } from "@/components/admin/AdminEmployeesSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { Menu, LayoutDashboard, Settings, Briefcase, Users } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+import { useEffect } from "react";
+import { toast } from "sonner";
 
 type AdminTab = "dashboard" | "settings" | "services" | "employees";
 
@@ -26,22 +30,57 @@ const AdminDashboard = () => {
     ? mockEnterprises.find((e) => e.id === user.enterprise_id)
     : null;
 
-  // Données de base
-  const [services, setServices] = useState<Service[]>(mockServices);
-  const [employees, setEmployees] = useState<AdminEmployee[]>(
-    mockUsers
-      .filter((u) => u.role === "agent")
-      .map((u) => {
-        const [firstName, ...lastParts] = u.name.split(" ");
-        const lastName = lastParts.join(" ");
-        return {
-          ...u,
-          firstName: firstName || u.name,
-          lastName: lastName || "",
-          position: "",
-        } as AdminEmployee;
-      })
-  );
+  const queryClient = useQueryClient();
+
+  const { data: services = [] } = useQuery({
+    queryKey: ["admin-services"],
+    queryFn: async (): Promise<Service[]> => {
+      const res = await apiFetch(`/api/admin/services`);
+      if (!res.ok) {
+        throw new Error("Erreur lors du chargement des services");
+      }
+      return res.json();
+    },
+  });
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ["admin-employees"],
+    queryFn: async (): Promise<AdminEmployee[]> => {
+      const res = await apiFetch(`/api/admin/employees`);
+      if (!res.ok) {
+        throw new Error("Erreur lors du chargement des employés");
+      }
+      const data = await res.json();
+      return (data as any[]).map((e) => ({
+        id: e.id,
+        firstName: e.first_name,
+        lastName: e.last_name,
+        email: e.email,
+        position: e.position ?? "",
+        enterprise_id: e.enterprise_id,
+        service_id: e.service_id,
+      } as AdminEmployee));
+    },
+  });
+
+  useEffect(() => {
+    const es1 = new EventSource(`/api/events/services`, { withCredentials: true });
+    const onServices = () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-services"] });
+    };
+    es1.addEventListener("services", onServices as EventListener);
+    const es2 = new EventSource(`/api/events/employees`, { withCredentials: true });
+    const onEmployees = () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
+    };
+    es2.addEventListener("employees", onEmployees as EventListener);
+    return () => {
+      es1.removeEventListener("services", onServices as EventListener);
+      es1.close();
+      es2.removeEventListener("employees", onEmployees as EventListener);
+      es2.close();
+    };
+  }, [queryClient]);
 
   // Formulaire Services
   const [serviceName, setServiceName] = useState("");
@@ -50,34 +89,93 @@ const AdminDashboard = () => {
   const [serviceResponsibleId, setServiceResponsibleId] = useState<number | null>(null);
   const [editServiceResponsibleId, setEditServiceResponsibleId] = useState<number | null>(null);
 
+  const createServiceMutation = useMutation({
+    mutationFn: async (payload: { name: string; responsible_employee_id: number | null }) => {
+      const res = await apiFetch(`/api/admin/services`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        toast: { success: { message: "Service créé" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la création du service");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-services"] });
+    },
+  });
+
+  const updateServiceMutation = useMutation({
+    mutationFn: async (payload: { id: number; name: string; responsible_employee_id: number | null }) => {
+      const res = await apiFetch(`/api/admin/services/${payload.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: payload.name, responsible_employee_id: payload.responsible_employee_id }),
+        toast: { success: { message: "Service mis à jour" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la mise à jour du service");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-services"] });
+    },
+  });
+
+  const deleteServiceMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/admin/services/${id}`, {
+        method: "DELETE",
+        toast: { success: { message: "Service supprimé" } },
+      });
+      if (!res.ok && res.status !== 204) {
+        throw new Error("Erreur lors de la suppression du service");
+      }
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-services"] });
+    },
+  });
+
+  const assignMembersMutation = useMutation({
+    mutationFn: async (payload: { serviceId: number; memberIds: number[] }) => {
+      const res = await apiFetch(`/api/admin/services/${payload.serviceId}/assign-members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member_ids: payload.memberIds }),
+        toast: { success: { message: "Membres ajoutés au service" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de l'ajout des membres au service");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
+  });
+
   const handleAddService = () => {
     if (!serviceName.trim()) return;
-    const newService: Service = {
-      id: Date.now(),
-      name: serviceName.trim(),
-      enterprise_id: 1,
-    };
-    setServices((prev) => [...prev, newService]);
+    createServiceMutation.mutate({ name: serviceName.trim(), responsible_employee_id: serviceResponsibleId });
     setServiceName("");
     setServiceResponsibleId(null);
   };
 
   const handleUpdateService = () => {
     if (!editingService || !editServiceName.trim()) return;
-    setServices((prev) =>
-      prev.map((s) =>
-        s.id === editingService.id
-          ? { ...s, name: editServiceName.trim() }
-          : s
-      )
-    );
+    updateServiceMutation.mutate({ id: editingService.id, name: editServiceName.trim(), responsible_employee_id: editServiceResponsibleId });
     setEditingService(null);
     setEditServiceName("");
     setEditServiceResponsibleId(null);
   };
 
   const handleDeleteService = (id: number) => {
-    setServices((prev) => prev.filter((s) => s.id !== id));
+    deleteServiceMutation.mutate(id);
   };
 
   // Formulaire Employés (nom, prénom, email, poste)
@@ -90,22 +188,108 @@ const AdminDashboard = () => {
   const [editEmployeeLastName, setEditEmployeeLastName] = useState("");
   const [editEmployeeEmail, setEditEmployeeEmail] = useState("");
   const [editEmployeePosition, setEditEmployeePosition] = useState("");
+  const [addEmployeeOpen, setAddEmployeeOpen] = useState(false);
+
+  const createEmployeeMutation = useMutation({
+    mutationFn: async (payload: { first_name: string; last_name: string; email: string; position: string; service_id: number | null }) => {
+      const res = await apiFetch(`/api/admin/employees`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        toast: { success: { message: "Employé créé" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la création de l'employé");
+      }
+      return res.json();
+    },
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ["admin-employees"] });
+      const previous = queryClient.getQueryData<AdminEmployee[]>(["admin-employees"]) || [];
+      const optimistic: AdminEmployee = {
+        id: -Date.now(),
+        firstName: payload.first_name,
+        lastName: payload.last_name,
+        email: payload.email,
+        position: payload.position ?? "",
+        enterprise_id: user?.enterprise_id ?? 0,
+        service_id: payload.service_id ?? null,
+      };
+      queryClient.setQueryData<AdminEmployee[]>(["admin-employees"], [optimistic, ...previous]);
+      return { previous };
+    },
+    onError: (_err, _payload, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<AdminEmployee[]>(["admin-employees"], context.previous);
+      }
+    },
+    onSuccess: () => {
+      setAddEmployeeOpen(false);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
+  });
+
+  const updateEmployeeMutation = useMutation({
+    mutationFn: async (payload: { id: number; first_name: string; last_name: string; email: string; position: string; service_id: number | null }) => {
+      const res = await apiFetch(`/api/admin/employees/${payload.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ first_name: payload.first_name, last_name: payload.last_name, email: payload.email, position: payload.position, service_id: payload.service_id }),
+        toast: { success: { message: "Employé mis à jour" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la mise à jour de l'employé");
+      }
+      return res.json();
+    },
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ["admin-employees"] });
+      const previous = queryClient.getQueryData<AdminEmployee[]>(["admin-employees"]) || [];
+      const next = previous.map((e) =>
+        e.id === payload.id
+          ? { ...e, firstName: payload.first_name, lastName: payload.last_name, email: payload.email, position: payload.position }
+          : e
+      );
+      queryClient.setQueryData<AdminEmployee[]>(["admin-employees"], next);
+      return { previous };
+    },
+    onError: (_err, _payload, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData<AdminEmployee[]>(["admin-employees"], context.previous);
+      }
+    },
+    onSuccess: () => {
+      setEditingEmployee(null);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
+  });
+
+  const deleteEmployeeMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/admin/employees/${id}`, {
+        method: "DELETE",
+        toast: { success: { message: "Employé supprimé" } },
+      });
+      if (!res.ok && res.status !== 204) {
+        throw new Error("Erreur lors de la suppression de l'employé");
+      }
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
+  });
 
   const handleAddEmployee = () => {
-    if (!employeeFirstName.trim() || !employeeLastName.trim() || !employeeEmail.trim()) return;
-    const fullName = `${employeeFirstName.trim()} ${employeeLastName.trim()}`;
-    const newEmployee: AdminEmployee = {
-      id: Date.now(),
-      name: fullName,
-      email: employeeEmail.trim(),
-      role: "agent",
-      service_id: null,
-      enterprise_id: 1,
-      firstName: employeeFirstName.trim(),
-      lastName: employeeLastName.trim(),
-      position: employeePosition.trim(),
-    };
-    setEmployees((prev) => [...prev, newEmployee]);
+    if (!employeeFirstName.trim() || !employeeLastName.trim() || !employeeEmail.trim()) {
+      toast.error("Veuillez renseigner prénom, nom et email");
+      return;
+    }
+    createEmployeeMutation.mutate({ first_name: employeeFirstName.trim(), last_name: employeeLastName.trim(), email: employeeEmail.trim(), position: employeePosition.trim(), service_id: null });
     setEmployeeFirstName("");
     setEmployeeLastName("");
     setEmployeeEmail("");
@@ -120,21 +304,7 @@ const AdminDashboard = () => {
       !editEmployeeEmail.trim()
     )
       return;
-    const fullName = `${editEmployeeFirstName.trim()} ${editEmployeeLastName.trim()}`;
-    setEmployees((prev) =>
-      prev.map((e) =>
-        e.id === editingEmployee.id
-          ? {
-              ...e,
-              name: fullName,
-              email: editEmployeeEmail.trim(),
-              firstName: editEmployeeFirstName.trim(),
-              lastName: editEmployeeLastName.trim(),
-              position: editEmployeePosition.trim(),
-            }
-          : e
-      )
-    );
+    updateEmployeeMutation.mutate({ id: editingEmployee.id, first_name: editEmployeeFirstName.trim(), last_name: editEmployeeLastName.trim(), email: editEmployeeEmail.trim(), position: editEmployeePosition.trim(), service_id: editingEmployee.service_id ?? null });
     setEditingEmployee(null);
     setEditEmployeeFirstName("");
     setEditEmployeeLastName("");
@@ -143,7 +313,7 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteEmployee = (id: number) => {
-    setEmployees((prev) => prev.filter((e) => e.id !== id));
+    deleteEmployeeMutation.mutate(id);
   };
 
   const [permissions, setPermissions] = useState<Record<number, Permission>>(() => {
@@ -200,21 +370,13 @@ const AdminDashboard = () => {
 
     // Services (CRUD)
     if (activeTab === "services") {
-      // Pour le select des responsables et les membres, on utilise tous les employés existants
       const availableEmployees = employees;
 
       const handleAddMembersToService = (serviceId: number, memberIds: number[]) => {
-        setEmployees((prev) =>
-          prev.map((e) =>
-            memberIds.includes(e.id)
-              ? {
-                  ...e,
-                  service_id: serviceId,
-                }
-              : e
-          )
-        );
+        assignMembersMutation.mutate({ serviceId, memberIds });
       };
+
+
 
       return (
         <AdminServicesSection
@@ -256,6 +418,8 @@ const AdminDashboard = () => {
         onEmailChange={setEmployeeEmail}
         onPositionChange={setEmployeePosition}
         onAddEmployee={handleAddEmployee}
+        addOpen={addEmployeeOpen}
+        onAddOpenChange={setAddEmployeeOpen}
         editingEmployee={editingEmployee}
         editFirstName={editEmployeeFirstName}
         editLastName={editEmployeeLastName}

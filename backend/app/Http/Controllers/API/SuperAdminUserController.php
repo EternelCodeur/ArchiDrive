@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class SuperAdminUserController extends Controller
@@ -31,6 +32,11 @@ class SuperAdminUserController extends Controller
             'password' => 'password123',
         ]);
 
+        if (!Cache::has('users_events_sequence')) {
+            Cache::forever('users_events_sequence', 0);
+        }
+        Cache::increment('users_events_sequence');
+
         return response()->json($user, Response::HTTP_CREATED);
     }
 
@@ -49,6 +55,8 @@ class SuperAdminUserController extends Controller
 
         $superAdmin->update($validated);
 
+        Cache::increment('users_events_sequence');
+
         return response()->json($superAdmin);
     }
 
@@ -61,6 +69,9 @@ class SuperAdminUserController extends Controller
         }
 
         $superAdmin->delete();
+
+        // Notify listeners via SSE sequence bump
+        Cache::increment('users_events_sequence');
 
         return response()->json(null, Response::HTTP_NO_CONTENT);
     }

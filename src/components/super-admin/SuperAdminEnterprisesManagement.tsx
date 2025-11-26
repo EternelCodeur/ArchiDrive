@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 
@@ -255,6 +255,9 @@ export const SuperAdminEnterprisesManagement = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Ajouter une entreprise</DialogTitle>
+            <DialogDescription>
+              Renseignez les informations de l'entreprise puis validez pour l'ajouter.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <Input
@@ -303,6 +306,9 @@ export const SuperAdminEnterprisesManagement = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Modifier l'entreprise</DialogTitle>
+            <DialogDescription>
+              Mettez à jour les informations de l'entreprise puis enregistrez.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <Input

@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { User } from "@/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
- 
+
 const fetchSuperAdmins = async (): Promise<User[]> => {
   const response = await apiFetch(`/api/super-admins`);
   if (!response.ok) {
@@ -128,6 +128,21 @@ export const SuperAdminSuperAdminsManagement = () => {
     setEditing(null);
   };
 
+  // Subscribe to server-sent events to auto-refresh list on user changes
+  useEffect(() => {
+    const es = new EventSource(`/api/events/users`, { withCredentials: true });
+    const onUsers = () => {
+      queryClient.invalidateQueries({ queryKey: ["super-admins"] });
+    };
+    es.addEventListener("users", onUsers as EventListener);
+    es.onerror = () => {
+    };
+    return () => {
+      es.removeEventListener("users", onUsers as EventListener);
+      es.close();
+    };
+  }, [queryClient]);
+
   return (
     <>
       <Card>
@@ -192,6 +207,9 @@ export const SuperAdminSuperAdminsManagement = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Ajouter un super administrateur</DialogTitle>
+            <DialogDescription>
+              Renseignez le nom et l'email du super administrateur puis validez.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <Input
@@ -228,6 +246,9 @@ export const SuperAdminSuperAdminsManagement = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Modifier le super administrateur</DialogTitle>
+            <DialogDescription>
+              Mettez à jour le nom ou l'email puis enregistrez les modifications.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <Input

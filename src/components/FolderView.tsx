@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Upload, FolderPlus, Search, CheckSquare, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { FolderItem } from "./FolderItem";
 import { FileItem } from "./FileItem";
 import { Breadcrumb } from "./Breadcrumb";
@@ -307,6 +307,9 @@ Vous pourrez brancher le backend plus tard.`,
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nouveau dossier</DialogTitle>
+            <DialogDescription>
+              Saisissez le nom du nouveau dossier puis validez pour le créer.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreateFolder} className="space-y-4">
             <Input
@@ -334,6 +337,9 @@ Vous pourrez brancher le backend plus tard.`,
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Renommer le document</DialogTitle>
+            <DialogDescription>
+              Entrez le nouveau nom pour ce document puis validez pour renommer.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleConfirmRenameDocument} className="space-y-4">
             <Input
@@ -357,6 +363,9 @@ Vous pourrez brancher le backend plus tard.`,
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Renommer le dossier</DialogTitle>
+            <DialogDescription>
+              Entrez le nouveau nom pour ce dossier puis validez pour renommer.
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleConfirmRenameFolder} className="space-y-4">
             <Input

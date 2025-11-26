@@ -11,7 +11,11 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   const { user, booting } = useAuth();
 
   if (booting) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+        Chargement...
+      </div>
+    );
   }
 
   if (!user) {

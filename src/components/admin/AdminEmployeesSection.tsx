@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -22,6 +23,8 @@ interface AdminEmployeesSectionProps {
   onEmailChange: (value: string) => void;
   onPositionChange: (value: string) => void;
   onAddEmployee: () => void;
+  addOpen: boolean;
+  onAddOpenChange: (open: boolean) => void;
   editingEmployee: AdminEmployee | null;
   editFirstName: string;
   editLastName: string;
@@ -48,6 +51,8 @@ export const AdminEmployeesSection = ({
   onEmailChange,
   onPositionChange,
   onAddEmployee,
+  addOpen,
+  onAddOpenChange,
   editingEmployee,
   editFirstName,
   editLastName,
@@ -78,13 +83,16 @@ export const AdminEmployeesSection = ({
           <CardTitle>Employés</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Dialog>
+          <Dialog open={addOpen} onOpenChange={onAddOpenChange}>
             <DialogTrigger asChild>
               <Button type="button">Ajouter un employé</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Ajouter un employé</DialogTitle>
+                <DialogDescription>
+                  Saisissez les informations de l'employé puis validez pour l'ajouter.
+                </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                 <Input
@@ -118,6 +126,7 @@ export const AdminEmployeesSection = ({
                     onLastNameChange("");
                     onEmailChange("");
                     onPositionChange("");
+                    onAddOpenChange(false);
                   }}
                 >
                   Annuler
@@ -168,6 +177,9 @@ export const AdminEmployeesSection = ({
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Modifier l'employé</DialogTitle>
+                          <DialogDescription>
+                            Mettez à jour les informations de cet employé puis enregistrez.
+                          </DialogDescription>
                         </DialogHeader>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                           <Input

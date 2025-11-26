@@ -12,7 +12,12 @@ export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions =
   const headers = new Headers(init.headers || {});
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
   const method = (init.method || 'GET').toUpperCase();
-  const shouldShowSuccess = init.toast?.success?.enabled ?? true; // always show by default, even for GET
+  const isMutation = method !== 'GET';
+  const shouldShowSuccess = (() => {
+    if (typeof init.toast?.success?.enabled === 'boolean') return init.toast.success.enabled;
+    if (!isMutation) return init.toast?.always === true; // default: hide GET success toasts unless always=true
+    return true; // default: show for mutations
+  })();
   const shouldShowError = init.toast?.error?.enabled ?? true;
 
   try {

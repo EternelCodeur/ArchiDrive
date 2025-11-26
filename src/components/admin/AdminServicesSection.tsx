@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -86,6 +87,9 @@ export const AdminServicesSection = ({
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Ajouter un service</DialogTitle>
+                <DialogDescription>
+                  Renseignez le nom du service et éventuellement son responsable.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-3 mt-4">
                 <Input
@@ -167,6 +171,9 @@ export const AdminServicesSection = ({
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Ajouter des membres au service</DialogTitle>
+                          <DialogDescription>
+                            Sélectionnez des employés sans service pour les ajouter à ce service.
+                          </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-3 mt-4">
                           {employeesWithoutService.length === 0 ? (
@@ -233,6 +240,9 @@ export const AdminServicesSection = ({
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Modifier le service</DialogTitle>
+                          <DialogDescription>
+                            Modifiez le nom du service et/ou son responsable puis enregistrez.
+                          </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-3 mt-4">
                           <Input
