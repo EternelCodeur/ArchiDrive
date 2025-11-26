@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 
 interface StorageOverviewApi {
   id: number;
@@ -18,7 +19,7 @@ export const SuperAdminStorageOverview = () => {
   const { data: overview, isLoading } = useQuery<StorageOverviewApi | null>({
     queryKey: ["super-admin-storage-overview"],
     queryFn: async () => {
-      const res = await fetch("/api/super-admin-storage-overviews");
+      const res = await apiFetch("/api/super-admin-storage-overviews");
       if (!res.ok) {
         throw new Error("Erreur lors du chargement du stockage global");
       }
@@ -29,13 +30,14 @@ export const SuperAdminStorageOverview = () => {
   const mutation = useMutation({
     mutationFn: async (payload: { total_capacity: number }) => {
       if (overview && overview.id) {
-        const res = await fetch(`/api/super-admin-storage-overviews/${overview.id}`, {
+        const res = await apiFetch(`/api/super-admin-storage-overviews/${overview.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             total_capacity: payload.total_capacity,
             used_storage: overview.used_storage,
           }),
+          toast: { success: { enabled: false }, error: { enabled: false } },
         });
         if (!res.ok) {
           throw new Error("Erreur lors de la mise à jour du stockage global");
@@ -43,13 +45,14 @@ export const SuperAdminStorageOverview = () => {
         return res.json();
       }
 
-      const res = await fetch(`/api/super-admin-storage-overviews`, {
+      const res = await apiFetch(`/api/super-admin-storage-overviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           total_capacity: payload.total_capacity,
           used_storage: 0,
         }),
+        toast: { success: { enabled: false }, error: { enabled: false } },
       });
       if (!res.ok) {
         throw new Error("Erreur lors de la création du stockage global");
@@ -61,13 +64,13 @@ export const SuperAdminStorageOverview = () => {
     },
   });
 
-  const totalCapacity = overview?.total_capacity ?? 0;
+  const totalCapacity = typeof overview?.total_capacity === "number" ? overview.total_capacity : 0;
   const usedStorage = overview?.used_storage ?? 0;
   const effectiveCapacity = totalCapacity || 1;
   const usedPercent = Math.min(100, Math.max(0, (usedStorage / effectiveCapacity) * 100));
 
   useEffect(() => {
-    if (overview) {
+    if (overview && typeof overview.total_capacity === "number") {
       setTotalCapacityInput(overview.total_capacity.toString());
     }
   }, [overview]);

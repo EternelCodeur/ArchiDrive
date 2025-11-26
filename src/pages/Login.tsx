@@ -27,15 +27,12 @@ const Login = () => {
     }
 
     setLoading(true);
-    const user = await login(identifier);
+    const user = await login(identifier, password, remember);
     setLoading(false);
 
     if (!user) {
-      toast.error("Identifiants incorrects");
       return;
     }
-
-    toast.success("Connexion réussie");
 
     if (user.role === "agent") {
       navigate("/agent", { replace: true });

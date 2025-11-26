@@ -3,11 +3,33 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { mockEnterprises } from "@/data/mockData";
-import type { Enterprise } from "@/types";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+
+interface Enterprise {
+  id: number;
+  name: string;
+  admin_name: string;
+  email: string;
+  storage: number;
+}
 
 export const SuperAdminEnterprisesManagement = () => {
-  const [enterprises, setEnterprises] = useState<Enterprise[]>(mockEnterprises);
+  const queryClient = useQueryClient();
+  const {
+    data: enterprises = [],
+    isLoading,
+    error,
+  } = useQuery<Enterprise[]>({
+    queryKey: ["enterprises"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/enterprises");
+      if (!res.ok) {
+        throw new Error("Erreur lors du chargement des entreprises");
+      }
+      return res.json();
+    },
+  });
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [name, setName] = useState("");
   const [adminName, setAdminName] = useState("");
@@ -18,6 +40,76 @@ export const SuperAdminEnterprisesManagement = () => {
   const [editAdminName, setEditAdminName] = useState("");
   const [editStorage, setEditStorage] = useState<string>("");
   const [editEmail, setEditEmail] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      adminName: string;
+      email: string;
+      storage: number;
+    }) => {
+      const res = await apiFetch("/api/enterprises", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: payload.name,
+          admin_name: payload.adminName,
+          email: payload.email,
+          storage: payload.storage,
+        }),
+        toast: { success: { message: "Entreprise créée" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la création de l'entreprise");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enterprises"] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (payload: {
+      id: number;
+      name: string;
+      adminName: string;
+      email: string;
+      storage: number;
+    }) => {
+      const res = await apiFetch(`/api/enterprises/${payload.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: payload.name,
+          admin_name: payload.adminName,
+          email: payload.email,
+          storage: payload.storage,
+        }),
+        toast: { success: { message: "Entreprise mise à jour" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la mise à jour de l'entreprise");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enterprises"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/enterprises/${id}`, { method: "DELETE", toast: { success: { message: "Entreprise supprimée" } } });
+      if (!res.ok && res.status !== 204) {
+        throw new Error("Erreur lors de la suppression de l'entreprise");
+      }
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enterprises"] });
+    },
+  });
 
   const resetAddForm = () => {
     setName("");
@@ -31,27 +123,30 @@ export const SuperAdminEnterprisesManagement = () => {
       return;
     }
     const storageValue = Number(storage) || 0;
-    const newEnterprise = {
-      id: Date.now(),
-      name: name.trim(),
-      adminName: adminName.trim(),
-      storage: storageValue,
-      email: email.trim(),
-    } as Enterprise;
-
-    setEnterprises((prev) => [...prev, newEnterprise]);
-    resetAddForm();
-    setIsAddOpen(false);
+    createMutation.mutate(
+      {
+        name: name.trim(),
+        adminName: adminName.trim(),
+        email: email.trim(),
+        storage: storageValue,
+      },
+      {
+        onSuccess: () => {
+          resetAddForm();
+          setIsAddOpen(false);
+        },
+      },
+    );
   };
 
   const handleDelete = (id: number) => {
-    setEnterprises((prev) => prev.filter((e) => e.id !== id));
+    deleteMutation.mutate(id);
   };
 
   const openEdit = (enterprise: Enterprise) => {
     setEditing(enterprise);
     setEditName(enterprise.name ?? "");
-    setEditAdminName(enterprise.adminName ?? "");
+    setEditAdminName(enterprise.admin_name ?? "");
     setEditStorage(
       enterprise.storage !== undefined && enterprise.storage !== null
         ? String(enterprise.storage)
@@ -66,22 +161,20 @@ export const SuperAdminEnterprisesManagement = () => {
       return;
     }
     const storageValue = Number(editStorage) || 0;
-
-    setEnterprises((prev) =>
-      prev.map((e) =>
-        e.id === editing.id
-          ? {
-              ...e,
-              name: editName.trim(),
-              adminName: editAdminName.trim(),
-              storage: storageValue,
-              email: editEmail.trim(),
-            }
-          : e
-      )
+    updateMutation.mutate(
+      {
+        id: editing.id,
+        name: editName.trim(),
+        adminName: editAdminName.trim(),
+        email: editEmail.trim(),
+        storage: storageValue,
+      },
+      {
+        onSuccess: () => {
+          setEditing(null);
+        },
+      },
     );
-
-    setEditing(null);
   };
 
   return (
@@ -96,6 +189,14 @@ export const SuperAdminEnterprisesManagement = () => {
               Ajouter une entreprise
             </Button>
           </div>
+          {isLoading && (
+            <p className="text-sm text-muted-foreground">Chargement des entreprises...</p>
+          )}
+          {error && (
+            <p className="text-sm text-destructive">
+              Erreur lors du chargement des entreprises
+            </p>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm mt-4">
             {enterprises.map((e) => (
@@ -107,7 +208,7 @@ export const SuperAdminEnterprisesManagement = () => {
                   <div className="space-y-1 text-xs text-muted-foreground">
                     <p>
                       <span className="font-medium text-foreground">Administrateur : </span>
-                      {e.adminName ?? "-"}
+                      {e.admin_name ?? "-"}
                     </p>
                     <p>
                       <span className="font-medium text-foreground">Stockage : </span>

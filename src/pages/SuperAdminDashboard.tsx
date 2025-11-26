@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { mockEnterprises, mockUsers, mockServices, mockDocuments } from "@/data/mockData";
-import { Database } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { SuperAdminSidebar, SuperAdminTab } from "@/components/super-admin/SuperAdminSidebar";
 import { SuperAdminEnterprisesManagement } from "@/components/super-admin/SuperAdminEnterprisesManagement";
 import { SuperAdminStorageOverview } from "@/components/super-admin/SuperAdminStorageOverview";
@@ -11,28 +11,50 @@ import { SuperAdminSuperAdminsManagement } from "@/components/super-admin/SuperA
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<SuperAdminTab>("dashboard");
-  const admins = mockUsers.filter((u) => u.role === "admin");
-  const totalEnterprises = mockEnterprises.length;
-  const totalCapacity = 1000; // Capacité totale simulée (Go)
-  const usedStorage = 500; // Go simulés déjà consommés
+  type Enterprise = { id: number; name: string; admin_name: string; email: string; storage: number };
+  const { data: enterprises = [], isLoading: enterprisesLoading } = useQuery<Enterprise[]>({
+    queryKey: ["enterprises"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/enterprises");
+      if (!res.ok) throw new Error("Erreur lors du chargement des entreprises");
+      return res.json();
+    },
+  });
+  const { data: overview } = useQuery<{ id: number; total_capacity: number; used_storage: number } | null>({
+    queryKey: ["super-admin-storage-overview"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/super-admin-storage-overviews");
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+  const { data: superAdmins = [] } = useQuery<Array<{ id: number }>>({
+    queryKey: ["super-admins"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/super-admins");
+      if (!res.ok) throw new Error("Erreur lors du chargement des super administrateurs");
+      return res.json();
+    },
+  });
 
-  // Stockage simulé par entreprise (en Go)
-  const [enterpriseStorage, setEnterpriseStorage] = useState<Record<number, number>>(
-    () => {
-      const initial: Record<number, number> = {};
-      mockEnterprises.forEach((e) => {
-        initial[e.id] = 1000; // 100 Go par entreprise par défaut
-      });
-      return initial;
-    }
-  );
-
-  const addStorage = (enterpriseId: number, amount: number) => {
-    setEnterpriseStorage((prev) => ({
-      ...prev,
-      [enterpriseId]: (prev[enterpriseId] ?? 0) + amount,
-    }));
+  type Stats = {
+    enterprises: number;
+    users: { total: number; admin: number; agent: number; super_admin: number };
+    storage: { total_capacity: number; used_storage: number };
+    users_by_enterprise: Record<number, number>;
   };
+  const { data: stats } = useQuery<Stats>({
+    queryKey: ["stats"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/stats");
+      if (!res.ok) throw new Error("Erreur lors du chargement des statistiques");
+      return res.json();
+    },
+  });
+
+  const totalEnterprises = enterprises.length;
+  const totalCapacity = typeof overview?.total_capacity === "number" ? overview.total_capacity : 0;
+  const usedStorage = typeof overview?.used_storage === "number" ? overview.used_storage : 0;
 
   const renderEnterprisesGrid = () => (
     <Card>
@@ -41,67 +63,33 @@ const SuperAdminDashboard = () => {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          {mockEnterprises.map((e) => {
-            const servicesForEnterprise = mockServices.filter((s) => s.enterprise_id === e.id);
-            const serviceIds = servicesForEnterprise.map((s) => s.id);
-            const usersForEnterprise = mockUsers.filter((u) => u.enterprise_id === e.id);
-            const documentsForEnterprise = mockDocuments.filter((d) => {
-              // Simulation : tous les documents appartiennent à l'entreprise
-              return true;
-            });
-
-            const currentStorage = enterpriseStorage[e.id] ?? 0;
-
-            return (
-              <Card key={e.id} className="border rounded-md p-3 space-y-2">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                  <div>
-                    <div className="font-medium">{e.name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      Admins : {admins.map((a) => a.name).join(", ") || "Aucun admin configuré"}
-                    </div>
-                  </div>
+          {enterprisesLoading && <p className="text-sm text-muted-foreground">Chargement...</p>}
+          {!enterprisesLoading && enterprises.map((e) => (
+            <Card key={e.id} className="border rounded-md p-3 space-y-2">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                  <div className="font-medium">{e.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Admin : {e.admin_name}</div>
+                  <div className="text-xs text-muted-foreground">Email admin : {e.email}</div>
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 gap-3 text-xs">
-                  <Card className="border-dashed">
-                    <CardContent className="py-3 px-3 flex flex-col gap-2">
-                      <span className="text-muted-foreground">Stockage alloué</span>
-                      <span className="text-base font-semibold">{currentStorage} Go</span>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-muted-foreground">Ajouter du stockage :</span>
-                        <input
-                          type="number"
-                          min={0}
-                          defaultValue={currentStorage}
-                          className="w-20 h-8 rounded-md border border-border bg-background px-2 text-xs"
-                          onBlur={(event) => {
-                            const value = Number((event.target as HTMLInputElement).value) || 0;
-                            if (value > 0) {
-                              addStorage(e.id, value);
-                            }
-                          }}
-                        />
-                        <span className="text-muted-foreground">Go</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-dashed">
-                    <CardContent className="py-3 px-3 flex flex-col gap-1">
-                      <span className="text-muted-foreground">Utilisateurs</span>
-                      <span className="text-base font-semibold">{usersForEnterprise.length}</span>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-dashed">
-                    <CardContent className="py-3 px-3 flex flex-col gap-1">
-                      <span className="text-muted-foreground">Documents</span>
-                      <span className="text-base font-semibold">{documentsForEnterprise.length}</span>
-                    </CardContent>
-                  </Card>
-                </div>
-              </Card>
-            );
-          })}
+              <div className="grid grid-cols-1 gap-3 text-xs">
+                <Card className="border-dashed">
+                  <CardContent className="py-3 px-3 flex flex-col gap-1">
+                    <span className="text-muted-foreground">Stockage alloué</span>
+                    <span className="text-base font-semibold">{e.storage ?? 0} Go</span>
+                  </CardContent>
+                </Card>
+                <Card className="border-dashed">
+                  <CardContent className="py-3 px-3 flex flex-col gap-1">
+                    <span className="text-muted-foreground">Utilisateurs</span>
+                    <span className="text-base font-semibold">{stats?.users_by_enterprise?.[e.id] ?? 0}</span>
+                  </CardContent>
+                </Card>
+              </div>
+            </Card>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -115,9 +103,7 @@ const SuperAdminDashboard = () => {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Gestion Super Admin</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Vue globale du tenant : entreprises clientes, stockage alloué et usage simulé.
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">Vue globale des données en base.</p>
             </div>
             <div />
           </div>
@@ -155,9 +141,7 @@ const SuperAdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold">{usedStorage} Go</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  sur {totalCapacity} Go (simulation)
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">sur {totalCapacity} Go</p>
               </CardContent>
             </Card>
           </div>
@@ -195,7 +179,7 @@ const SuperAdminDashboard = () => {
     }
 
     // Onglet gestion du stockage : on délègue au composant dédié
-    return <SuperAdminStorageOverview totalCapacity={totalCapacity} usedStorage={usedStorage} />;
+    return <SuperAdminStorageOverview />;
   };
 
   return (

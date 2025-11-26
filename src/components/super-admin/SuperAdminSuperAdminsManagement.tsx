@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { User } from "@/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
  
 const fetchSuperAdmins = async (): Promise<User[]> => {
-  const response = await fetch(`/api/super-admins`);
+  const response = await apiFetch(`/api/super-admins`);
   if (!response.ok) {
     throw new Error("Erreur lors du chargement des super administrateurs");
   }
@@ -34,12 +35,13 @@ export const SuperAdminSuperAdminsManagement = () => {
 
   const createMutation = useMutation({
     mutationFn: async (payload: { name: string; email: string }) => {
-      const response = await fetch(`/api/super-admins`, {
+      const response = await apiFetch(`/api/super-admins`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        toast: { success: { message: "Super admin créé" } },
       });
       if (!response.ok) {
         throw new Error("Erreur lors de la création du super administrateur");
@@ -53,12 +55,13 @@ export const SuperAdminSuperAdminsManagement = () => {
 
   const updateMutation = useMutation({
     mutationFn: async (payload: { id: number; name: string; email: string }) => {
-      const response = await fetch(`/api/super-admins/${payload.id}`, {
+      const response = await apiFetch(`/api/super-admins/${payload.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ name: payload.name, email: payload.email }),
+        toast: { success: { message: "Super admin mis à jour" } },
       });
       if (!response.ok) {
         throw new Error("Erreur lors de la mise à jour du super administrateur");
@@ -72,8 +75,9 @@ export const SuperAdminSuperAdminsManagement = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await fetch(`/api/super-admins/${id}`, {
+      const response = await apiFetch(`/api/super-admins/${id}`, {
         method: "DELETE",
+        toast: { success: { message: "Super admin supprimé" } },
       });
       if (!response.ok && response.status !== 204) {
         throw new Error("Erreur lors de la suppression du super administrateur");

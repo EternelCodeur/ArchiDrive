@@ -1,12 +1,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
-import { mockUsers } from '@/data/mockData';
+import { apiFetch } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
   setUser: (user: User | null) => void;
-  login: (identifier: string) => Promise<User | null>;
+  login: (identifier: string, password: string, remember: boolean) => Promise<User | null>;
   logout: () => void;
+  booting: boolean;
   canEdit: (serviceId: number | null) => boolean;
   canDelete: (serviceId: number | null) => boolean;
   canShare: (serviceId: number | null) => boolean;
@@ -15,44 +16,48 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const stored = window.localStorage.getItem('auth_user');
-      if (!stored) return null;
-      return JSON.parse(stored) as User;
-    } catch {
+  const [user, setUser] = useState<User | null>(null);
+  const [booting, setBooting] = useState<boolean>(true);
+
+  const login = async (identifier: string, password: string, remember: boolean): Promise<User | null> => {
+    const res = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ identifier, password, remember }),
+      toast: { success: { message: 'Connexion réussie' }, error: { message: 'Identifiants invalides' } },
+    });
+    if (!res.ok) {
       return null;
     }
-  });
-
-  const login = async (identifier: string): Promise<User | null> => {
-    const normalized = identifier.trim().toLowerCase();
-    const found = mockUsers.find(
-      (u) => u.email.toLowerCase() === normalized || u.name.toLowerCase() === normalized
-    );
-
-    if (found) {
-      setUser(found);
-      try {
-        window.localStorage.setItem('auth_user', JSON.stringify(found));
-      } catch {
-        // ignore storage errors
-      }
-      return found;
+    const data = await res.json();
+    const nextUser: User | null = data?.user ?? null;
+    if (nextUser) {
+      setUser(nextUser);
+      return nextUser;
     }
-
     return null;
   };
 
-  const logout = () => {
-    setUser(null);
+  const logout = async () => {
     try {
-      window.localStorage.removeItem('auth_user');
-    } catch {
-      // ignore storage errors
-    }
+      await apiFetch('/api/auth/logout', { method: 'POST', toast: { success: { message: 'Déconnexion réussie' } } });
+    } catch { void 0 }
+    setUser(null);
   };
+
+  useEffect(() => {
+    const boot = async () => {
+      try {
+        const res = await apiFetch('/api/auth/me');
+        if (res.ok) {
+          const me = (await res.json()) as User;
+          setUser(me);
+        }
+      } catch { void 0 } finally {
+        setBooting(false);
+      }
+    };
+    boot();
+  }, []);
 
   const canEdit = (serviceId: number | null): boolean => {
     if (!user) return false;
@@ -79,7 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, canEdit, canDelete, canShare }}>
+    <AuthContext.Provider value={{ user, setUser, login, logout, booting, canEdit, canDelete, canShare }}>
       {children}
     </AuthContext.Provider>
   );
