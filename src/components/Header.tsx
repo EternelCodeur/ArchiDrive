@@ -99,8 +99,8 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => {
-                  logout();
+                onSelect={async () => {
+                  await logout();
                   navigate("/login", { replace: true });
                 }}
               >

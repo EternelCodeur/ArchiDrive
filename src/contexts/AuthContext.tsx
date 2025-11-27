@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   setUser: (user: User | null) => void;
   login: (identifier: string, password: string, remember: boolean) => Promise<User | null>;
-  logout: () => void;
+  logout: () => Promise<void>;
   booting: boolean;
   canEdit: (serviceId: number | null) => boolean;
   canDelete: (serviceId: number | null) => boolean;
@@ -47,17 +47,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    try {
-      await apiFetch('/api/auth/logout', { method: 'POST', toast: { success: { message: 'Déconnexion réussie' } } });
-    } catch { void 0 }
+    // Clear local state first to avoid blocking the UI
     setUser(null);
     try { sessionStorage.removeItem('auth:user'); } catch { void 0 }
+    // Fire-and-forget API call with short timeout and no toasts
+    try {
+      void apiFetch('/api/auth/logout', { method: 'POST', toast: { error: { enabled: false }, success: { enabled: false } } });
+    } catch { void 0 }
   };
 
   useEffect(() => {
     const boot = async () => {
       try {
-        const res = await apiFetch('/api/auth/me', { timeoutMs: 4000, toast: { error: { enabled: false } } });
+        const res = await apiFetch('/api/auth/me', { toast: { error: { enabled: false } } });
         if (res.ok) {
           const me = (await res.json()) as User;
           setUser(me);

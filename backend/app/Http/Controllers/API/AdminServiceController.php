@@ -20,7 +20,7 @@ class AdminServiceController extends Controller
         $user = Auth::user();
         $enterpriseId = $user?->enterprise_id;
         if (!$enterpriseId) {
-            return response()->json([], Response::HTTP_OK);
+            return response()->json([], Response::HTTP_FORBIDDEN);
         }
         $services = Service::where('enterprise_id', $enterpriseId)->get();
         return response()->json($services);

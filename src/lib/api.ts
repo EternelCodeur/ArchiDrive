@@ -16,12 +16,12 @@ export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions =
   const isMutation = method !== 'GET';
   const shouldShowSuccess = init.toast?.success?.enabled === true || (init.toast?.always === true && !isMutation);
   const shouldShowError = init.toast?.error?.enabled === true;
-  const timeoutMs = init.timeoutMs ?? 10000;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutMs = init.timeoutMs;
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timeout = timeoutMs ? setTimeout(() => controller!.abort(), timeoutMs) : undefined;
 
   try {
-    const res = await fetch(input, { ...init, headers, credentials: 'include', signal: controller.signal });
+    const res = await fetch(input, { ...init, headers, credentials: 'include', signal: controller?.signal });
 
     // Attempt to build a meaningful message
     const methodMsg: Record<string, string> = {
@@ -68,5 +68,5 @@ export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions =
       statusText: body.message,
       headers: { 'content-type': 'application/json' },
     });
-  } finally { clearTimeout(timeout) }
+  } finally { if (timeout) clearTimeout(timeout) }
 }

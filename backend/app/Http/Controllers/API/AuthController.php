@@ -58,7 +58,7 @@ class AuthController extends Controller
         ]);
 
         // Set HttpOnly cookie for the JWT
-        return $response->cookie(
+        $response = $response->cookie(
             'token',
             $token,
             $minutes,
@@ -69,6 +69,31 @@ class AuthController extends Controller
             false,
             $sameSite,
         );
+
+        // Set a non-HttpOnly cookie with minimal user info for client-side needs (id,name,email,role)
+        try {
+            $userPayload = base64_encode(json_encode([
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ], JSON_UNESCAPED_UNICODE));
+            $response = $response->cookie(
+                'u',
+                $userPayload,
+                $minutes,
+                '/',
+                null,
+                $secure,
+                false, // not HttpOnly so frontend can read if needed
+                false,
+                $sameSite,
+            );
+        } catch (\Throwable $e) {
+            // ignore cookie set failure
+        }
+
+        return $response;
     }
 
     public function me(Request $request)
@@ -84,6 +109,7 @@ class AuthController extends Controller
     public function logout()
     {
         Cookie::queue(Cookie::forget('token'));
+        Cookie::queue(Cookie::forget('u'));
         return response()->json(['message' => 'Logged out']);
     }
 
@@ -112,7 +138,7 @@ class AuthController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'service_id' => null,
-            'enterprise_id' => 0,
+            'enterprise_id' => $user->enterprise_id,
             'avatar' => null,
         ];
     }

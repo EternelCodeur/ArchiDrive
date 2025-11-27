@@ -46,12 +46,18 @@ const AdminDashboard = () => {
   const { data: employees = [] } = useQuery({
     queryKey: ["admin-employees"],
     queryFn: async (): Promise<AdminEmployee[]> => {
-      const res = await apiFetch(`/api/admin/employees`);
+      const res = await apiFetch(`/api/admin/employees`, { toast: { error: { enabled: false } } });
       if (!res.ok) {
-        throw new Error("Erreur lors du chargement des employés");
+        if (res.status === 403) {
+          toast.error("Cet administrateur n'a pas d'entreprise assignée. Veuillez configurer enterprise_id.");
+          return [];
+        }
+        // Preserve previous data on other errors/timeouts to avoid empty UI flashes
+        const prev = queryClient.getQueryData<AdminEmployee[]>(["admin-employees"]) || [];
+        return prev;
       }
       const data = await res.json();
-      return (data as any[]).map((e) => ({
+      const mapped = (data as any[]).map((e) => ({
         id: e.id,
         firstName: e.first_name,
         lastName: e.last_name,
@@ -60,7 +66,13 @@ const AdminDashboard = () => {
         enterprise_id: e.enterprise_id,
         service_id: e.service_id,
       } as AdminEmployee));
+      // Frontend safeguard: if the connected user has an enterprise_id, only show employees from that enterprise
+      // The API already enforces this, but this prevents accidental mixing in the UI if data is reused.
+      return user?.enterprise_id ? mapped.filter(e => e.enterprise_id === user.enterprise_id) : mapped;
     },
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 
   useEffect(() => {
@@ -406,36 +418,39 @@ const AdminDashboard = () => {
       );
     }
 
-    // Employés (CRUD)
-    return (
-      <AdminEmployeesSection
-        employees={employees}
-        firstName={employeeFirstName}
-        lastName={employeeLastName}
-        email={employeeEmail}
-        position={employeePosition}
-        onFirstNameChange={setEmployeeFirstName}
-        onLastNameChange={setEmployeeLastName}
-        onEmailChange={setEmployeeEmail}
-        onPositionChange={setEmployeePosition}
-        onAddEmployee={handleAddEmployee}
-        addOpen={addEmployeeOpen}
-        onAddOpenChange={setAddEmployeeOpen}
-        editingEmployee={editingEmployee}
-        editFirstName={editEmployeeFirstName}
-        editLastName={editEmployeeLastName}
-        editEmail={editEmployeeEmail}
-        editPosition={editEmployeePosition}
-        onEditFirstNameChange={setEditEmployeeFirstName}
-        onEditLastNameChange={setEditEmployeeLastName}
-        onEditEmailChange={setEditEmployeeEmail}
-        onEditPositionChange={setEditEmployeePosition}
-        onCancelEdit={() => setEditingEmployee(null)}
-        onUpdateEmployee={handleUpdateEmployee}
-        onDeleteEmployee={handleDeleteEmployee}
-        onStartEdit={(employee) => setEditingEmployee(employee)}
-      />
-    );
+    // Employés (CRUD) - Only for admin
+    if (user?.role === "admin") {
+      return (
+        <AdminEmployeesSection
+          employees={employees}
+          firstName={employeeFirstName}
+          lastName={employeeLastName}
+          email={employeeEmail}
+          position={employeePosition}
+          onFirstNameChange={setEmployeeFirstName}
+          onLastNameChange={setEmployeeLastName}
+          onEmailChange={setEmployeeEmail}
+          onPositionChange={setEmployeePosition}
+          onAddEmployee={handleAddEmployee}
+          addOpen={addEmployeeOpen}
+          onAddOpenChange={setAddEmployeeOpen}
+          editingEmployee={editingEmployee}
+          editFirstName={editEmployeeFirstName}
+          editLastName={editEmployeeLastName}
+          editEmail={editEmployeeEmail}
+          editPosition={editEmployeePosition}
+          onEditFirstNameChange={setEditEmployeeFirstName}
+          onEditLastNameChange={setEditEmployeeLastName}
+          onEditEmailChange={setEditEmployeeEmail}
+          onEditPositionChange={setEditEmployeePosition}
+          onCancelEdit={() => setEditingEmployee(null)}
+          onUpdateEmployee={handleUpdateEmployee}
+          onDeleteEmployee={handleDeleteEmployee}
+          onStartEdit={(employee) => setEditingEmployee(employee)}
+        />
+      );
+    }
+    return <AdminDashboardOverview totalDocuments={mockDocuments.length} totalEmployees={employees.length} totalServices={services.length} totalStorage={1000} weeklyActivity={[12,5,18,9,14,7,11]} />;
   };
 
   return (
@@ -496,16 +511,18 @@ const AdminDashboard = () => {
               <Briefcase className="w-4 h-4" />
               {!sidebarCollapsed && <span>Services</span>}
             </Button>
-            <Button
-              variant={activeTab === "employees" ? "default" : "ghost"}
-              className={`w-full ${sidebarCollapsed ? "justify-center" : "justify-start"} gap-2`}
-              size="sm"
-              type="button"
-              onClick={() => setActiveTab("employees")}
-            >
-              <Users className="w-4 h-4" />
-              {!sidebarCollapsed && <span>Employés</span>}
-            </Button>
+            {user?.role === "admin" && (
+              <Button
+                variant={activeTab === "employees" ? "default" : "ghost"}
+                className={`w-full ${sidebarCollapsed ? "justify-center" : "justify-start"} gap-2`}
+                size="sm"
+                type="button"
+                onClick={() => setActiveTab("employees")}
+              >
+                <Users className="w-4 h-4" />
+                {!sidebarCollapsed && <span>Employés</span>}
+              </Button>
+            )}
           </div>
         </aside>
 
