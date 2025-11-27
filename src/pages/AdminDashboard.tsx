@@ -290,6 +290,7 @@ const AdminDashboard = () => {
       return;
     }
     createEmployeeMutation.mutate({ first_name: employeeFirstName.trim(), last_name: employeeLastName.trim(), email: employeeEmail.trim(), position: employeePosition.trim(), service_id: null });
+    setAddEmployeeOpen(false);
     setEmployeeFirstName("");
     setEmployeeLastName("");
     setEmployeeEmail("");

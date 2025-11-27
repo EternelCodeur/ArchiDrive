@@ -20,19 +20,20 @@ class AuthController extends Controller
             'remember' => ['nullable', 'boolean'],
         ]);
 
-        $identifier = $validated['identifier'];
+        $identifier = trim((string) $validated['identifier']);
         $password = $validated['password'];
         $remember = (bool)($validated['remember'] ?? false);
 
-        $user = User::where('email', $identifier)
-            ->orWhere('name', $identifier)
+        $lowerIdentifier = strtolower($identifier);
+        $user = User::whereRaw('LOWER(email) = ?', [$lowerIdentifier])
+            ->orWhereRaw('LOWER(name) = ?', [$lowerIdentifier])
             ->first();
 
         if (!$user || !Hash::check($password, $user->password)) {
             return response()->json(['message' => 'Identifiants invalides'], Response::HTTP_UNAUTHORIZED);
         }
 
-        $ttlSeconds = $remember ? 60 * 60 * 24 * 14 : 60 * 60 * 2; // 14j vs 2h
+        $ttlSeconds = $remember ? 60 * 60 * 24 * 7 : 60 * 60 * 2; // 7j vs 2h
         $now = time();
         $payload = [
             'iss' => config('app.url'),

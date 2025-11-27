@@ -6,6 +6,7 @@ export type ApiFetchOptions = RequestInit & {
     error?: { enabled?: boolean; message?: string };
     always?: boolean; // if true, also show success toasts for GET requests
   };
+  timeoutMs?: number;
 };
 
 export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions = {}): Promise<Response> {
@@ -13,15 +14,14 @@ export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions =
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
   const method = (init.method || 'GET').toUpperCase();
   const isMutation = method !== 'GET';
-  const shouldShowSuccess = (() => {
-    if (typeof init.toast?.success?.enabled === 'boolean') return init.toast.success.enabled;
-    if (!isMutation) return init.toast?.always === true; // default: hide GET success toasts unless always=true
-    return true; // default: show for mutations
-  })();
-  const shouldShowError = init.toast?.error?.enabled ?? true;
+  const shouldShowSuccess = init.toast?.success?.enabled === true || (init.toast?.always === true && !isMutation);
+  const shouldShowError = init.toast?.error?.enabled === true;
+  const timeoutMs = init.timeoutMs ?? 10000;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(input, { ...init, headers, credentials: 'include' });
+    const res = await fetch(input, { ...init, headers, credentials: 'include', signal: controller.signal });
 
     // Attempt to build a meaningful message
     const methodMsg: Record<string, string> = {
@@ -56,9 +56,17 @@ export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions =
 
     return res;
   } catch (e: unknown) {
+    const aborted = (e instanceof DOMException) && e.name === 'AbortError';
     if (shouldShowError) {
-      toast.error(init.toast?.error?.message || 'Erreur réseau');
+      toast.error(init.toast?.error?.message || (aborted ? 'Délai dépassé' : 'Erreur réseau'));
     }
-    throw e;
-  }
+    // Return a synthetic Response to keep callers in the normal flow
+    const status = aborted ? 499 : 520; // 499: client timeout, 520: unknown error
+    const body = { message: aborted ? 'Délai dépassé' : 'Erreur réseau' };
+    return new Response(JSON.stringify(body), {
+      status,
+      statusText: body.message,
+      headers: { 'content-type': 'application/json' },
+    });
+  } finally { clearTimeout(timeout) }
 }
