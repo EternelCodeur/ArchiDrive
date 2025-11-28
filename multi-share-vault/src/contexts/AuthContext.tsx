@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { User } from '@/types';
 import { apiFetch } from '@/lib/api';
 
@@ -16,6 +17,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
   const initialUser: User | null = (() => {
     try {
       const raw = sessionStorage.getItem('auth:user');
@@ -41,6 +43,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (nextUser) {
       setUser(nextUser);
       try { sessionStorage.setItem('auth:user', JSON.stringify(nextUser)); } catch { void 0 }
+      // Clear all cached queries to avoid showing previous user's data
+      try { queryClient.clear(); } catch { void 0 }
       return nextUser;
     }
     return null;
@@ -50,6 +54,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Clear local state first to avoid blocking the UI
     setUser(null);
     try { sessionStorage.removeItem('auth:user'); } catch { void 0 }
+    // Clear cached queries so next user session starts clean
+    try { queryClient.clear(); } catch { void 0 }
     // Fire-and-forget API call with short timeout and no toasts
     try {
       void apiFetch('/api/auth/logout', { method: 'POST', toast: { error: { enabled: false }, success: { enabled: false } } });

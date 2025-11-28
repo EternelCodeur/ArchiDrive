@@ -3,7 +3,9 @@ import { Sidebar } from "@/components/Sidebar";
 import { FolderTabs } from "@/components/FolderTabs";
 import { Header } from "@/components/Header";
 import { OpenTab } from "@/types";
+import type { Folder as FolderDto } from "@/types";
 import { getFolderById } from "@/data/mockData";
+import { apiFetch } from "@/lib/api";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { FolderTree } from "@/components/FolderTree";
 
@@ -14,7 +16,7 @@ const Index = () => {
   const [collapseFolderId, setCollapseFolderId] = useState<number | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
 
-  const handleFolderClick = (folderId: number) => {
+  const handleFolderClick = async (folderId: number) => {
     setCurrentFolderId(folderId);
     
     const existingTab = openTabs.find((tab) => tab.folderId === folderId);
@@ -30,8 +32,41 @@ const Index = () => {
           folderName: folder.name,
           parentId: folder.parent_id,
         };
-        setOpenTabs([...openTabs, newTab]);
+        setOpenTabs((prev) => [...prev, newTab]);
         setActiveTabId(newTab.id.toString());
+      } else {
+        try {
+          const res = await apiFetch(`/api/folders/${folderId}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
+          if (res.ok) {
+            const data = (await res.json()) as FolderDto;
+            const newTab: OpenTab = {
+              id: Date.now(),
+              folderId,
+              folderName: data?.name ?? `Dossier #${folderId}`,
+              parentId: (data && typeof data.parent_id === 'number') ? data.parent_id : null,
+            };
+            setOpenTabs((prev) => [...prev, newTab]);
+            setActiveTabId(newTab.id.toString());
+          } else {
+            const fallback: OpenTab = {
+              id: Date.now(),
+              folderId,
+              folderName: `Dossier #${folderId}`,
+              parentId: null,
+            };
+            setOpenTabs((prev) => [...prev, fallback]);
+            setActiveTabId(fallback.id.toString());
+          }
+        } catch {
+          const fallback: OpenTab = {
+            id: Date.now(),
+            folderId,
+            folderName: `Dossier #${folderId}`,
+            parentId: null,
+          };
+          setOpenTabs((prev) => [...prev, fallback]);
+          setActiveTabId(fallback.id.toString());
+        }
       }
     }
   };

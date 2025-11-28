@@ -15,6 +15,34 @@ use Illuminate\Support\Str;
 
 class AdminServiceController extends Controller
 {
+    public function visible(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json([], Response::HTTP_UNAUTHORIZED);
+        }
+
+        if ($user->role === 'super_admin') {
+            return response()->json(Service::all());
+        }
+
+        if ($user->role === 'admin') {
+            if (!$user->enterprise_id) return response()->json([]);
+            $services = Service::where('enterprise_id', $user->enterprise_id)->get();
+            return response()->json($services);
+        }
+
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if ($emp && $emp->service_id) {
+                $svc = Service::where('id', $emp->service_id)->first();
+                return response()->json($svc ? [$svc] : []);
+            }
+            return response()->json([]);
+        }
+
+        return response()->json([]);
+    }
     public function index(Request $request)
     {
         $user = Auth::user();

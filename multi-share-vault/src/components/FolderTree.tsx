@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
-import { Folder as FolderType } from "@/types";
-import { getFoldersByParent } from "@/data/mockData";
+import { Folder as FolderType, Service } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 
 interface FolderTreeProps {
   onFolderClick: (folderId: number) => void;
@@ -21,9 +23,17 @@ interface TreeNodeProps {
 
 const TreeNode = ({ folder, level, onFolderClick, currentFolderId, externalCollapseId, onCloseTabByFolderId }: TreeNodeProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const subfolders = getFoldersByParent(folder.id);
-  const hasChildren = subfolders.length > 0;
   const isActive = currentFolderId === folder.id;
+  const { data: apiChildren } = useQuery<FolderType[]>({
+    queryKey: ['folders-by-parent', folder.id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/folders?parent_id=${folder.id}`);
+      if (!res.ok) return [] as FolderType[];
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  const hasChildren = (apiChildren?.length ?? 0) > 0;
 
   useEffect(() => {
     if (externalCollapseId === folder.id) {
@@ -72,33 +82,89 @@ const TreeNode = ({ folder, level, onFolderClick, currentFolderId, externalColla
 };
 
 export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId, onCloseTabByFolderId }: FolderTreeProps) => {
-  const allRoot = getFoldersByParent(null);
-  const sharedRoot = allRoot.find((f) => f.is_shared_folder);
-  const rootFolders = allRoot.filter((f) => !f.is_shared_folder);
+  const { user } = useAuth();
+  const { data: visibleServices } = useQuery<Service[]>({
+    queryKey: ["visible-services", user?.id ?? 0],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/services/visible`);
+      if (!res.ok) throw new Error("Erreur chargement services visibles");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const ServiceNode = ({ service }: { service: Service }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const { data: roots } = useQuery<FolderType[]>({
+      queryKey: ['service-root', service.id],
+      queryFn: async () => {
+        const res = await apiFetch(`/api/folders?service_id=${service.id}`);
+        if (!res.ok) return [] as FolderType[];
+        return res.json();
+      },
+      staleTime: 60_000,
+    });
+    const root = (roots ?? [])[0];
+    const { data: children } = useQuery<FolderType[]>({
+      queryKey: ['folders-by-parent', root?.id ?? 0],
+      enabled: typeof root?.id === 'number' && isExpanded,
+      queryFn: async () => {
+        const res = await apiFetch(`/api/folders?parent_id=${root!.id}`);
+        if (!res.ok) return [] as FolderType[];
+        return res.json();
+      },
+      staleTime: 30_000,
+    });
+
+    const isActive = typeof root?.id === 'number' && currentFolderId === root.id;
+    const hasChildren = (children?.length ?? 0) > 0;
+
+    return (
+      <div>
+        <div
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all group ${
+            isActive
+              ? "bg-blue-100 text-blue-700 font-medium"
+              : "text-slate-100 hover:bg-blue-100 hover:text-blue-700"
+          }`}
+          style={{ paddingLeft: `12px` }}
+          onClick={() => {
+            if (typeof root?.id === 'number') {
+              if (hasChildren) setIsExpanded((v) => !v);
+              onFolderClick(root.id);
+            }
+          }}
+        >
+          {isExpanded ? (
+            <FolderOpen className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <Folder className="w-4 h-4 flex-shrink-0" />
+          )}
+          <span className="text-sm truncate flex-1">{service.name}</span>
+        </div>
+        {isExpanded && hasChildren && (
+          <div>
+            {(children ?? []).map((f) => (
+              <TreeNode
+                key={f.id}
+                folder={f}
+                level={1}
+                onFolderClick={onFolderClick}
+                currentFolderId={currentFolderId}
+                externalCollapseId={externalCollapseId}
+                onCloseTabByFolderId={onCloseTabByFolderId}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-1 py-2">
-      {sharedRoot && (
-        <TreeNode
-          key={sharedRoot.id}
-          folder={sharedRoot}
-          level={0}
-          onFolderClick={onFolderClick}
-          currentFolderId={currentFolderId}
-          externalCollapseId={externalCollapseId}
-          onCloseTabByFolderId={onCloseTabByFolderId}
-        />
-      )}
-      {rootFolders.map((folder) => (
-        <TreeNode
-          key={folder.id}
-          folder={folder}
-          level={0}
-          onFolderClick={onFolderClick}
-          currentFolderId={currentFolderId}
-          externalCollapseId={externalCollapseId}
-          onCloseTabByFolderId={onCloseTabByFolderId}
-        />
+      {(visibleServices ?? []).map((svc) => (
+        <ServiceNode key={svc.id} service={svc} />
       ))}
     </div>
   );

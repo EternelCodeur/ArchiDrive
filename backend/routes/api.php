@@ -10,6 +10,7 @@ use App\Http\Controllers\API\StatsController;
 use App\Http\Controllers\API\EventsController;
 use App\Http\Controllers\API\AdminServiceController;
 use App\Http\Controllers\API\AdminEmployeeController;
+use App\Http\Controllers\API\FolderController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'OK']);
@@ -19,6 +20,12 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 Route::middleware('jwt')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+    // Visible services for the authenticated user (agent/admin/super_admin)
+    Route::get('/services/visible', [AdminServiceController::class, 'visible']);
+
+    // Folders CRUD (index/show/store)
+    Route::apiResource('folders', FolderController::class)->only(['index', 'show', 'store']);
 
     Route::middleware('role:super_admin')->group(function () {
         Route::apiResource('super-admins', SuperAdminUserController::class);

@@ -10,9 +10,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ShareTarget } from "@/types";
+import { ShareTarget, Service, Employee } from "@/types";
 import { toast } from "sonner";
-import { mockServices, mockUsers } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { getVisibleServicesFromApi, getEnterpriseUsersFromApi } from "@/data/mockData";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -30,6 +32,18 @@ export const ShareModal = ({
   const [shareTarget, setShareTarget] = useState<ShareTarget["type"]>("user");
   const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+  const { user } = useAuth();
+  const { data: services } = useQuery<Service[]>({
+    queryKey: ["visible-services", user?.id ?? 0],
+    queryFn: getVisibleServicesFromApi,
+    staleTime: 60_000,
+  });
+  const { data: employees } = useQuery<Employee[]>({
+    queryKey: ["enterprise-users", user?.id ?? 0],
+    queryFn: getEnterpriseUsersFromApi,
+    // l'endpoint est admin-only; si non-admin, ça retournera [] via helper
+    staleTime: 60_000,
+  });
 
   const handleShare = () => {
     const servicesCount = shareTarget === "service" ? selectedServiceIds.length : 0;
@@ -90,7 +104,7 @@ export const ShareModal = ({
             <div className="space-y-2">
               <Label>Services de l'entreprise</Label>
               <div className="max-h-60 overflow-y-auto space-y-1">
-                {mockServices.map((service) => {
+                {(services ?? []).map((service) => {
                   const checked = selectedServiceIds.includes(service.id);
                   return (
                     <button
@@ -121,17 +135,17 @@ export const ShareModal = ({
             <div className="space-y-2">
               <Label>Utilisateurs de l'entreprise</Label>
               <div className="max-h-60 overflow-y-auto space-y-1">
-                {mockUsers.map((user) => {
-                  const checked = selectedUserIds.includes(user.id);
+                {(employees ?? []).map((emp) => {
+                  const checked = selectedUserIds.includes(emp.id);
                   return (
                     <button
-                      key={user.id}
+                      key={emp.id}
                       type="button"
                       onClick={() =>
                         setSelectedUserIds((prev) =>
-                          prev.includes(user.id)
-                            ? prev.filter((id) => id !== user.id)
-                            : [...prev, user.id]
+                          prev.includes(emp.id)
+                            ? prev.filter((id) => id !== emp.id)
+                            : [...prev, emp.id]
                         )
                       }
                       className={`w-full flex items-center justify-between px-3 py-2 rounded-md border text-left text-sm transition-colors ${
@@ -140,8 +154,8 @@ export const ShareModal = ({
                           : "border-border hover:bg-accent"
                       }`}
                     >
-                      <span>{user.name}</span>
-                      <span className="text-xs text-muted-foreground">{user.email}</span>
+                      <span>{`${emp.first_name} ${emp.last_name}`.trim()}</span>
+                      <span className="text-xs text-muted-foreground">{emp.email}</span>
                     </button>
                   );
                 })}

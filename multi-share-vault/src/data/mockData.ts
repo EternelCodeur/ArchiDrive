@@ -1,47 +1,31 @@
-import { Folder, Document, Enterprise, Service, User } from "@/types";
+import { Folder, Document, Enterprise, Service, User, Employee } from "@/types";
+import { apiFetch } from "@/lib/api";
 
 export const mockEnterprises: Enterprise[] = [
   { id: 1, name: "TechCorp Solutions" }
 ];
 
-export const mockServices: Service[] = [
-  { id: 1, name: "Ressources Humaines", enterprise_id: 1 },
-  { id: 2, name: "Comptabilité", enterprise_id: 1 },
-  { id: 3, name: "Direction", enterprise_id: 1 },
-  { id: 4, name: "Marketing", enterprise_id: 1 }
-];
+// Runtime-created folders (persist in-memory only) — disabled from listing
+const extraFolders: Folder[] = [];
+const getAllFolders = (): Folder[] => [];
 
-export const mockUsers: User[] = [
-  { id: 1, name: "Alice Agent", email: "agent@techcorp.fr", role: "agent", service_id: 1, enterprise_id: 1 },
-  { id: 2, name: "Andrew Admin", email: "admin@techcorp.fr", role: "admin", service_id: null, enterprise_id: 1 },
-  { id: 3, name: "Sam Super", email: "super@archidrive.io", role: "super_admin", service_id: null, enterprise_id: 1 }
-];
+export const isRuntimeFolder = (id: number): boolean => {
+  return extraFolders.some((f) => f.id === id);
+};
 
-export const mockFolders: Folder[] = [
-  // Dossiers RH
-  { id: 2, name: "Ressources Humaines", parent_id: null, service_id: 1, shared: false },
-  { id: 3, name: "Congés", parent_id: 2, service_id: 1 },
-  { id: 4, name: "Salaires", parent_id: 2, service_id: 1 },
-  { id: 5, name: "Recrutement", parent_id: 2, service_id: 1 },
-  { id: 6, name: "Congés annuels", parent_id: 3, service_id: 1 },
-  { id: 7, name: "Congés maladie", parent_id: 3, service_id: 1 },
-  
-  // Dossiers Comptabilité
-  { id: 8, name: "Comptabilité", parent_id: null, service_id: 2, shared: false },
-  { id: 9, name: "Factures 2024", parent_id: 8, service_id: 2 },
-  { id: 10, name: "Budget", parent_id: 8, service_id: 2 },
-  { id: 11, name: "Janvier 2024", parent_id: 9, service_id: 2 },
-  { id: 12, name: "Février 2024", parent_id: 9, service_id: 2 },
-  
-  // Dossiers Direction
-  { id: 13, name: "Direction", parent_id: null, service_id: 3, shared: true },
-  { id: 14, name: "Rapports", parent_id: 13, service_id: 3 },
-  { id: 15, name: "Stratégie", parent_id: 13, service_id: 3 },
-  
-  // Dossiers Marketing
-  { id: 16, name: "Marketing", parent_id: null, service_id: 4, shared: false },
-  { id: 17, name: "Campagnes", parent_id: 16, service_id: 4 }
-];
+export const addFolder = (payload: { id?: number; name: string; parent_id: number | null; service_id: number | null }): Folder => {
+  const id = payload.id ?? Date.now();
+  const folder: Folder = {
+    id,
+    name: payload.name,
+    parent_id: payload.parent_id,
+    service_id: payload.service_id,
+  };
+  extraFolders.push(folder);
+  return folder;
+};
+
+ 
 
 export const mockDocuments: Document[] = [
   {
@@ -92,7 +76,7 @@ export const mockDocuments: Document[] = [
 ];
 
 export const getFoldersByParent = (parentId: number | null): Folder[] => {
-  return mockFolders.filter((folder) => folder.parent_id === parentId);
+  return getAllFolders().filter((folder) => folder.parent_id === parentId);
 };
 
 export const getDocumentsByFolder = (folderId: number): Document[] => {
@@ -100,7 +84,7 @@ export const getDocumentsByFolder = (folderId: number): Document[] => {
 };
 
 export const getFolderById = (id: number): Folder | undefined => {
-  return mockFolders.find((folder) => folder.id === id);
+  return getAllFolders().find((folder) => folder.id === id);
 };
 
 export const getFolderPath = (folderId: number | null): Folder[] => {
@@ -119,3 +103,63 @@ export const getFolderPath = (folderId: number | null): Folder[] => {
 
   return path;
 };
+
+// API-backed helpers
+export async function getVisibleServicesFromApi(): Promise<Service[]> {
+  try {
+    const res = await apiFetch('/api/services/visible', { toast: { error: { enabled: false }, success: { enabled: false } } });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function getEnterpriseUsersFromApi(): Promise<Employee[]> {
+  try {
+    const res = await apiFetch('/api/admin/employees', { toast: { error: { enabled: false }, success: { enabled: false } } });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function getServiceRootFoldersFromApi(serviceId: number): Promise<Folder[]> {
+  try {
+    const res = await apiFetch(`/api/folders?service_id=${serviceId}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function getSubfoldersFromApi(parentId: number): Promise<Folder[]> {
+  try {
+    const res = await apiFetch(`/api/folders?parent_id=${parentId}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function getServiceTreeFromApi(serviceId: number): Promise<Folder[]> {
+  const roots = await getServiceRootFoldersFromApi(serviceId);
+  const all: Folder[] = [...roots];
+  const seen = new Set<number>(roots.map(r => r.id));
+  const queue: Folder[] = [...roots];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    const children = await getSubfoldersFromApi(cur.id);
+    for (const c of children) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        all.push(c);
+        queue.push(c);
+      }
+    }
+  }
+  return all;
+}

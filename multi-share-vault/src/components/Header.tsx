@@ -19,6 +19,10 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
   const { user, logout } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   const currentEnterpriseName =
     user && user.role !== "super_admin"
@@ -99,10 +103,8 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onSelect={async () => {
-                  await logout();
-                  navigate("/login", { replace: true });
-                }}
+                onSelect={(e) => { e.preventDefault(); void handleLogout(); }}
+                onClick={() => { void handleLogout(); }}
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Déconnexion

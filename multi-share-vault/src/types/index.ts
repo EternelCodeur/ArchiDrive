@@ -23,6 +23,7 @@ export interface User {
   service_id: number | null;
   enterprise_id: number;
   enterprise_name?: string | null;
+  service_name?: string | null;
   avatar?: string;
 }
 
@@ -73,4 +74,17 @@ export interface SharedAccess {
   permissions: SharePermissions;
   expires_at?: string;
   created_at: string;
+}
+
+export interface Employee {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  position?: string | null;
+  enterprise_id: number;
+  service_id?: number | null;
+  user_id?: number | null;
+  created_at?: string;
+  updated_at?: string;
 }

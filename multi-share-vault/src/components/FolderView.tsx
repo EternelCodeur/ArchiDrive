@@ -7,8 +7,12 @@ import { FolderItem } from "./FolderItem";
 import { FileItem } from "./FileItem";
 import { Breadcrumb } from "./Breadcrumb";
 import { ShareModal } from "./ShareModal";
-import { getFoldersByParent, getDocumentsByFolder, getFolderPath } from "@/data/mockData";
+import { getFoldersByParent, getDocumentsByFolder, getFolderPath, getFolderById, isRuntimeFolder } from "@/data/mockData";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
+import type { Service, Folder as FolderDto } from "@/types";
 
 interface FolderViewProps {
   folderId: number | null;
@@ -16,6 +20,7 @@ interface FolderViewProps {
 }
 
 export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -32,10 +37,114 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const [currentDocToRename, setCurrentDocToRename] = useState<{ id: number; name: string } | null>(null);
   const [currentFolderToRename, setCurrentFolderToRename] = useState<{ id: number; name: string } | null>(null);
   const [renameInput, setRenameInput] = useState("");
+  const { user } = useAuth();
+  const { data: visibleServices } = useQuery<Service[]>({
+    queryKey: ["visible-services", user?.id ?? 0],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/services/visible`);
+      if (!res.ok) throw new Error("Erreur chargement services visibles");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
   
-  const subfolders = getFoldersByParent(folderId);
+  const selectedFolder = folderId ? getFolderById(folderId) : null;
+  const { data: serverFolder } = useQuery<FolderDto | null>({
+    queryKey: ['folder-by-id', folderId ?? 0, user?.id ?? 0],
+    enabled: !!folderId && !selectedFolder,
+    queryFn: async () => {
+      const res = await apiFetch(`/api/folders/${folderId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  const effectiveSelected: (FolderDto | null) = selectedFolder ?? serverFolder ?? null;
+  const mockPath = folderId ? getFolderPath(folderId) : [];
+  const { data: resolvedDbFolder } = useQuery<FolderDto | null>({
+    queryKey: ['resolve-db-folder', folderId ?? 0, user?.id ?? 0],
+    enabled: !!selectedFolder && !!selectedFolder.service_id && selectedFolder.parent_id !== null,
+    queryFn: async () => {
+      const serviceId = selectedFolder!.service_id as number;
+      // get DB root(s) for this service
+      const resRoots = await apiFetch(`/api/folders?service_id=${serviceId}`);
+      if (!resRoots.ok) return null;
+      const roots: FolderDto[] = await resRoots.json();
+      if (!Array.isArray(roots) || roots.length === 0) return null;
+      // choose root by name match if possible
+      const mockRoot = mockPath.find(p => p.parent_id === null) || mockPath[0];
+      let current = (mockRoot ? roots.find(r => r.name === mockRoot.name) : null) || roots[0];
+      // Walk down the mock path after root
+      const segments = mockPath.filter(p => p.parent_id !== null);
+      for (const seg of segments) {
+        const resChildren = await apiFetch(`/api/folders?parent_id=${current.id}`);
+        if (!resChildren.ok) return null;
+        const children: FolderDto[] = await resChildren.json();
+        const match = children.find(c => c.name === seg.name);
+        if (!match) return null;
+        current = match;
+      }
+      return current || null;
+    },
+    staleTime: 30_000,
+  });
+  const { data: dbRootFolders } = useQuery<FolderDto[]>({
+    queryKey: ['db-root-for-service', selectedFolder?.service_id ?? 0, user?.id ?? 0],
+    enabled: !!selectedFolder && selectedFolder.parent_id === null && typeof selectedFolder.service_id === 'number',
+    queryFn: async () => {
+      const res = await apiFetch(`/api/folders?service_id=${selectedFolder!.service_id}`);
+      if (!res.ok) throw new Error('Erreur chargement dossier racine');
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  const isMockRootSelected = !!selectedFolder && selectedFolder.parent_id === null;
+  const rootIds = (dbRootFolders ?? []).map(r => r.id).filter((id): id is number => typeof id === 'number');
+  const { data: serverSubfoldersForRoots } = useQuery<FolderDto[]>({
+    queryKey: ['folders-by-parents', rootIds.join(','), user?.id ?? 0],
+    enabled: isMockRootSelected && rootIds.length > 0,
+    queryFn: async () => {
+      const results = await Promise.all(
+        rootIds.map(async (rid) => {
+          const res = await apiFetch(`/api/folders?parent_id=${rid}`);
+          if (!res.ok) return [] as FolderDto[];
+          return res.json();
+        })
+      );
+      const merged = results.flat();
+      const unique = new Map<number, FolderDto>();
+      for (const f of merged) { if (typeof f.id === 'number') unique.set(f.id, f); }
+      return Array.from(unique.values());
+    },
+    staleTime: 10_000,
+  });
+  const parentIdForServer = effectiveSelected
+    ? (!isMockRootSelected
+        ? (resolvedDbFolder?.id ?? effectiveSelected.id)
+        : null)
+    : null;
+  const { data: serverSubfolders } = useQuery<FolderDto[]>({
+    queryKey: ['folders-by-parent', parentIdForServer ?? 0, user?.id ?? 0],
+    enabled: typeof parentIdForServer === 'number',
+    queryFn: async () => {
+      const res = await apiFetch(`/api/folders?parent_id=${parentIdForServer}`);
+      if (!res.ok) throw new Error('Erreur chargement dossiers');
+      return res.json();
+    },
+    staleTime: 10_000,
+  });
+  const subfolders = isMockRootSelected ? (serverSubfoldersForRoots ?? []) : (typeof parentIdForServer === 'number' ? (serverSubfolders ?? []) : []);
   const documents = folderId ? getDocumentsByFolder(folderId) : [];
   const path = folderId ? getFolderPath(folderId) : [];
+  const svcNameById = new Map((visibleServices ?? []).map((s) => [s.id, s.name]));
+  const mapRootName = (f: { parent_id: number | null; service_id: number | null; name: string }) =>
+    f.parent_id === null ? (typeof f.service_id === 'number' ? (svcNameById.get(f.service_id) ?? f.name) : f.name) : f.name;
+  const displaySubfolders = subfolders.map((f) => ({ ...f, name: renamedFolders[f.id] ?? mapRootName(f) }));
+  const pathLike: FolderDto[] = (path.length === 0 && effectiveSelected)
+    ? [effectiveSelected]
+    : (path as unknown as FolderDto[]);
+  const displayPath = pathLike.map((f) => ({ ...f, name: mapRootName(f) }));
+  const infoServiceId = (effectiveSelected?.service_id ?? (dbRootFolders && dbRootFolders[0]?.service_id)) ?? null;
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -56,17 +165,102 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     });
   };
 
-  const handleCreateFolder = (e: React.FormEvent) => {
+  const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newFolderName.trim();
     if (!name) return;
 
-    toast.success(`Dossier "${name}" créé`, {
-      description: "Cette action est simulée côté interface pour l'instant.",
-    });
+    // Determine parent and service linkage
+    let parentId = folderId ?? null;
+    let serviceId: number | null = null;
+    if (parentId !== null) {
+      const parent = getFolderById(parentId);
+      serviceId = parent?.service_id ?? null;
+    } else {
+      // Fallbacks for root creation
+      // 1) user's service
+      serviceId = user?.service_id ?? null;
+      // 2) visible services (single)
+      if (!serviceId && (visibleServices?.length === 1)) {
+        serviceId = visibleServices[0].id;
+      }
+      // If we resolved a service, create inside its DB root folder
+      if (serviceId) {
+        try {
+          const resRoots = await apiFetch(`/api/folders?service_id=${serviceId}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
+          if (resRoots.ok) {
+            const roots: Array<{ id: number }> = await resRoots.json();
+            const root = Array.isArray(roots) ? roots[0] : null;
+            if (root && typeof root.id === 'number') parentId = root.id;
+          }
+        } catch { void 0 }
+      }
+    }
 
-    setNewFolderName("");
-    setIsCreateModalOpen(false);
+    // If serviceId is still not resolved, try fetching visible services on-demand
+    if (!serviceId) {
+      try {
+        const res = await apiFetch('/api/services/visible', { toast: { error: { enabled: false }, success: { enabled: false } } });
+        if (res.ok) {
+          const list: Service[] = await res.json();
+          if (Array.isArray(list) && list.length === 1) {
+            serviceId = list[0].id;
+            const rootFolders = getFoldersByParent(null);
+            const serviceRoot = rootFolders.find((f) => f.service_id === serviceId) ?? null;
+            if (serviceRoot) {
+              parentId = serviceRoot.id;
+            }
+          }
+        }
+      } catch { void 0 }
+    }
+
+    if (!serviceId) {
+      toast.error("Création impossible: votre compte n'est pas assigné à un service. Contactez l'administrateur.");
+      return;
+    }
+
+    // If parentId points to a mock root (not a DB folder), resolve the corresponding DB root folder id
+    if (parentId !== null) {
+      const parent = getFolderById(parentId);
+      if (parent && parent.parent_id === null && !isRuntimeFolder(parentId) && parent.service_id) {
+        const originalMockParentId = parentId;
+        try {
+          const resRoot = await apiFetch(`/api/folders?service_id=${parent.service_id}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
+          if (resRoot.ok) {
+            const roots: Array<{ id: number } & Record<string, unknown>> = await resRoot.json();
+            const dbRoot = Array.isArray(roots) ? roots.find((r) => typeof r.id === 'number') : null;
+            if (dbRoot) parentId = dbRoot.id;
+          }
+        } catch { void 0 }
+        // If mapping failed, fallback to root creation
+        if (parentId === originalMockParentId) {
+          parentId = null;
+        }
+      }
+    }
+
+    // Persist to backend
+    try {
+      const res = await apiFetch('/api/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, parent_id: parentId, service_id: serviceId }),
+        toast: { success: { message: 'Dossier créé' } },
+      });
+      if (!res.ok) {
+        throw new Error('Erreur lors de la création du dossier');
+      }
+      const saved = await res.json();
+      setNewFolderName("");
+      setIsCreateModalOpen(false);
+      if (parentId !== null) {
+        await queryClient.invalidateQueries({ queryKey: ['folders-by-parent', parentId, user?.id ?? 0] });
+      }
+      onFolderClick(saved.id);
+    } catch (err) {
+      toast.error('Création du dossier échouée');
+    }
   };
 
   const handleUploadClick = () => {
@@ -228,7 +422,8 @@ Vous pourrez brancher le backend plus tard.`,
             </div>
           </div>
 
-          <Breadcrumb path={path} onNavigate={onFolderClick} />
+          <Breadcrumb path={displayPath} onNavigate={onFolderClick} />
+          
         </div>
       </div>
 
@@ -254,10 +449,10 @@ Vous pourrez brancher le backend plus tard.`,
         ) : (
           <div className="space-y-6">
             {/* Folders */}
-            {subfolders.length > 0 && (
+            {displaySubfolders.length > 0 && (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                  {subfolders.map((folder) => (
+                  {displaySubfolders.map((folder) => (
                     <FolderItem
                       key={folder.id}
                       folder={{ ...folder, name: renamedFolders[folder.id] ?? folder.name }}
@@ -388,7 +583,7 @@ Vous pourrez brancher le backend plus tard.`,
       <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        folderName={shareDocumentName || path[path.length - 1]?.name || "Document"}
+        folderName={shareDocumentName || displayPath[displayPath.length - 1]?.name || "Document"}
         folderId={shareDocumentId || folderId || 0}
       />
     </div>
