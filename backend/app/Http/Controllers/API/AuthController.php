@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Enterprise;
 use Firebase\JWT\JWT;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -132,6 +133,12 @@ class AuthController extends Controller
 
     private function formatUser(User $user): array
     {
+        $enterpriseName = null;
+        if ($user->enterprise_id) {
+            $enterprise = Enterprise::find($user->enterprise_id);
+            $enterpriseName = $enterprise?->name;
+        }
+
         return [
             'id' => $user->id,
             'name' => $user->name,
@@ -139,6 +146,7 @@ class AuthController extends Controller
             'role' => $user->role,
             'service_id' => null,
             'enterprise_id' => $user->enterprise_id,
+            'enterprise_name' => $enterpriseName,
             'avatar' => null,
         ];
     }

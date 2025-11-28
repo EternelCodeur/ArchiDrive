@@ -31,6 +31,7 @@ interface AdminServicesSectionProps {
   editResponsibleId: number | null;
   onEditResponsibleChange: (id: number | null) => void;
   onAddMembersToService: (serviceId: number, memberIds: number[]) => void;
+  onRemoveMembersFromService: (serviceId: number, memberIds: number[]) => void;
 }
 
 export const AdminServicesSection = ({
@@ -51,6 +52,7 @@ export const AdminServicesSection = ({
   editResponsibleId,
   onEditResponsibleChange,
   onAddMembersToService,
+  onRemoveMembersFromService,
 }: AdminServicesSectionProps) => {
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,6 +150,9 @@ export const AdminServicesSection = ({
               const employeesWithoutService = availableEmployees.filter(
                 (e) => e.service_id == null
               );
+              const employeesInService = availableEmployees.filter(
+                (e) => e.service_id === s.id
+              );
 
               return (
                 <div
@@ -225,18 +230,86 @@ export const AdminServicesSection = ({
                         </div>
                       </DialogContent>
                     </Dialog>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={() => onEditService(s)}
-                      >
-                        Modifier
-                      </Button>
-                    </DialogTrigger>
-                    {editingService && editingService.id === s.id && (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          type="button"
+                          className="bg-amber-600 text-white hover:bg-amber-700"
+                          onClick={() => resetMemberSelection()}
+                        >
+                          Retirer des membres
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Retirer des membres du service</DialogTitle>
+                          <DialogDescription>
+                            Sélectionnez des employés de ce service pour les retirer.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-3 mt-4">
+                          {employeesInService.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              Aucun membre dans ce service.
+                            </p>
+                          ) : (
+                            <div className="space-y-2 max-h-64 overflow-auto">
+                              {employeesInService.map((u) => (
+                                <label
+                                  key={u.id}
+                                  className="flex items-center justify-between text-sm border rounded-md px-3 py-2"
+                                >
+                                  <div>
+                                    <p>
+                                      {u.firstName} {u.lastName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">{u.email}</p>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedMembers.includes(u.id)}
+                                    onChange={() => toggleMemberSelection(u.id)}
+                                  />
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 justify-end mt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={resetMemberSelection}
+                          >
+                            Annuler
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              if (selectedMembers.length > 0) {
+                                onRemoveMembersFromService(s.id, selectedMembers);
+                                resetMemberSelection();
+                              }
+                            }}
+                          >
+                            Retirer
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          onClick={() => onEditService(s)}
+                        >
+                          Modifier
+                        </Button>
+                      </DialogTrigger>
+                      {editingService && editingService.id === s.id && (
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Modifier le service</DialogTitle>
@@ -281,8 +354,8 @@ export const AdminServicesSection = ({
                           </Button>
                         </div>
                       </DialogContent>
-                    )}
-                  </Dialog>
+                      )}
+                    </Dialog>
                   <Button
                     size="sm"
                     variant="outline"

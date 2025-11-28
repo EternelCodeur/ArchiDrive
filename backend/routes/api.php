@@ -36,6 +36,7 @@ Route::middleware('jwt')->group(function () {
         Route::put('/admin/services/{service}', [AdminServiceController::class, 'update']);
         Route::delete('/admin/services/{service}', [AdminServiceController::class, 'destroy']);
         Route::post('/admin/services/{service}/assign-members', [AdminServiceController::class, 'assignMembers']);
+        Route::post('/admin/services/{service}/remove-members', [AdminServiceController::class, 'removeMembers']);
 
         // Employees CRUD
         Route::apiResource('/admin/employees', AdminEmployeeController::class);

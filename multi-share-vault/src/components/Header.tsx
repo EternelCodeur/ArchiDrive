@@ -20,9 +20,9 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
   const isMobile = useIsMobile();
   const navigate = useNavigate();
 
-  const currentEnterprise =
-    user && user.role !== "super_admin" && user.enterprise_id
-      ? mockEnterprises.find((e) => e.id === user.enterprise_id)
+  const currentEnterpriseName =
+    user && user.role !== "super_admin"
+      ? (user.enterprise_name ?? (user.enterprise_id ? (mockEnterprises.find((e) => e.id === user.enterprise_id)?.name ?? null) : null))
       : null;
 
   const getRoleBadge = (role: string) => {
@@ -46,10 +46,10 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
             </Button>
           )}
           <img src="/logo-archi.png" alt="ArchiDrive" className="h-16 w-16 object-contain" />
-          {currentEnterprise && (
+          {currentEnterpriseName && (
             <div className="hidden sm:flex flex-col leading-tight">
               <span className="text-sm font-semibold truncate max-w-[180px]">
-                {currentEnterprise.name}
+                {currentEnterpriseName}
               </span>
             </div>
           )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,10 @@ export const SuperAdminSuperAdminsManagement = () => {
   const { data: superAdmins = [], isLoading } = useQuery({
     queryKey: ["super-admins"],
     queryFn: fetchSuperAdmins,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    refetchInterval: 10000,
   });
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [name, setName] = useState("");
@@ -128,20 +132,7 @@ export const SuperAdminSuperAdminsManagement = () => {
     setEditing(null);
   };
 
-  // Subscribe to server-sent events to auto-refresh list on user changes
-  useEffect(() => {
-    const es = new EventSource(`/api/events/users`, { withCredentials: true });
-    const onUsers = () => {
-      queryClient.invalidateQueries({ queryKey: ["super-admins"] });
-    };
-    es.addEventListener("users", onUsers as EventListener);
-    es.onerror = () => {
-    };
-    return () => {
-      es.removeEventListener("users", onUsers as EventListener);
-      es.close();
-    };
-  }, [queryClient]);
+  
 
   return (
     <>

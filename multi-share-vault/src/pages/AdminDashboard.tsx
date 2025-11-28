@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockDocuments, mockEnterprises } from "@/data/mockData";
+import { mockDocuments } from "@/data/mockData";
 import type { Service } from "@/types";
 import type { AdminEmployee } from "@/types/admin";
 import type { Permission } from "@/components/admin/AdminSettingsPermissions";
@@ -16,7 +16,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Menu, LayoutDashboard, Settings, Briefcase, Users } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import { useEffect } from "react";
 import { toast } from "sonner";
 
 type AdminTab = "dashboard" | "settings" | "services" | "employees";
@@ -26,9 +25,7 @@ const AdminDashboard = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { user } = useAuth();
 
-  const currentEnterprise = user?.enterprise_id
-    ? mockEnterprises.find((e) => e.id === user.enterprise_id)
-    : null;
+  const currentEnterpriseName = user?.role !== "super_admin" ? (user?.enterprise_name ?? null) : null;
 
   const queryClient = useQueryClient();
 
@@ -41,6 +38,10 @@ const AdminDashboard = () => {
       }
       return res.json();
     },
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    refetchInterval: 10000,
   });
 
   const { data: employees = [] } = useQuery({
@@ -73,26 +74,8 @@ const AdminDashboard = () => {
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,
+    refetchInterval: 10000,
   });
-
-  useEffect(() => {
-    const es1 = new EventSource(`/api/events/services`, { withCredentials: true });
-    const onServices = () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-services"] });
-    };
-    es1.addEventListener("services", onServices as EventListener);
-    const es2 = new EventSource(`/api/events/employees`, { withCredentials: true });
-    const onEmployees = () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
-    };
-    es2.addEventListener("employees", onEmployees as EventListener);
-    return () => {
-      es1.removeEventListener("services", onServices as EventListener);
-      es1.close();
-      es2.removeEventListener("employees", onEmployees as EventListener);
-      es2.close();
-    };
-  }, [queryClient]);
 
   // Formulaire Services
   const [serviceName, setServiceName] = useState("");
@@ -171,8 +154,30 @@ const AdminDashboard = () => {
     },
   });
 
+  const removeMembersMutation = useMutation({
+    mutationFn: async (payload: { serviceId: number; memberIds: number[] }) => {
+      const res = await apiFetch(`/api/admin/services/${payload.serviceId}/remove-members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member_ids: payload.memberIds }),
+        toast: { success: { message: "Membres retirés du service" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors du retrait des membres du service");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
+  });
+
   const handleAddService = () => {
     if (!serviceName.trim()) return;
+    if (serviceResponsibleId === null) {
+      toast.error("Veuillez sélectionner un responsable du service");
+      return;
+    }
     createServiceMutation.mutate({ name: serviceName.trim(), responsible_employee_id: serviceResponsibleId });
     setServiceName("");
     setServiceResponsibleId(null);
@@ -180,6 +185,10 @@ const AdminDashboard = () => {
 
   const handleUpdateService = () => {
     if (!editingService || !editServiceName.trim()) return;
+    if (editServiceResponsibleId === null) {
+      toast.error("Veuillez sélectionner un responsable du service");
+      return;
+    }
     updateServiceMutation.mutate({ id: editingService.id, name: editServiceName.trim(), responsible_employee_id: editServiceResponsibleId });
     setEditingService(null);
     setEditServiceName("");
@@ -389,6 +398,10 @@ const AdminDashboard = () => {
         assignMembersMutation.mutate({ serviceId, memberIds });
       };
 
+      const handleRemoveMembersFromService = (serviceId: number, memberIds: number[]) => {
+        removeMembersMutation.mutate({ serviceId, memberIds });
+      };
+
 
 
       return (
@@ -406,7 +419,7 @@ const AdminDashboard = () => {
           onEditService={(service) => {
             setEditingService(service);
             setEditServiceName(service.name);
-            setEditServiceResponsibleId(null);
+            setEditServiceResponsibleId(service.responsible_employee_id ?? null);
           }}
           availableEmployees={availableEmployees}
           responsibleId={serviceResponsibleId}
@@ -414,6 +427,7 @@ const AdminDashboard = () => {
           editResponsibleId={editServiceResponsibleId}
           onEditResponsibleChange={setEditServiceResponsibleId}
           onAddMembersToService={handleAddMembersToService}
+          onRemoveMembersFromService={handleRemoveMembersFromService}
         />
       );
     }
@@ -465,7 +479,7 @@ const AdminDashboard = () => {
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">
-                  {currentEnterprise?.name ?? "Mon entreprise"}
+                  {currentEnterpriseName ?? "Mon entreprise"}
                 </p>
               </div>
             )}

@@ -42,7 +42,7 @@ class AdminEmployeeController extends Controller
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:employees,email', 'unique:users,email'],
-            'position' => ['nullable', 'string', 'max:255'],
+            'position' => ['required', 'string', 'max:255'],
             'service_id' => ['nullable', 'integer'],
         ]);
 

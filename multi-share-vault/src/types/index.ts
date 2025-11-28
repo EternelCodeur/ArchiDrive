@@ -12,6 +12,7 @@ export interface Service {
   id: number;
   name: string;
   enterprise_id: number;
+  responsible_employee_id?: number | null;
 }
 
 export interface User {
@@ -21,6 +22,7 @@ export interface User {
   role: UserRole;
   service_id: number | null;
   enterprise_id: number;
+  enterprise_name?: string | null;
   avatar?: string;
 }
 

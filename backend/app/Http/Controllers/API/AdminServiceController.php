@@ -36,7 +36,7 @@ class AdminServiceController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'responsible_employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+            'responsible_employee_id' => ['required', 'integer', 'exists:employees,id'],
         ]);
 
         $exists = Service::where('enterprise_id', $enterpriseId)
@@ -52,13 +52,12 @@ class AdminServiceController extends Controller
             'responsible_employee_id' => $validated['responsible_employee_id'] ?? null,
         ]);
 
-        if (!empty($validated['responsible_employee_id'])) {
-            $resp = Employee::find($validated['responsible_employee_id']);
-            if ($resp && (int)$resp->enterprise_id === (int)$enterpriseId) {
-                $resp->service_id = $service->id;
-                $resp->save();
-            }
+        $resp = Employee::find($validated['responsible_employee_id']);
+        if (!$resp || (int)$resp->enterprise_id !== (int)$enterpriseId) {
+            return response()->json(['message' => 'Le responsable sélectionné est invalide pour cette entreprise'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
+        $resp->service_id = $service->id;
+        $resp->save();
 
         try {
             $enterprise = Enterprise::find($enterpriseId);
@@ -104,21 +103,21 @@ class AdminServiceController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'responsible_employee_id' => ['nullable', 'integer'],
+            'responsible_employee_id' => ['required', 'integer', 'exists:employees,id'],
         ]);
+
+        $resp = Employee::find($validated['responsible_employee_id']);
+        if (!$resp || (int)$resp->enterprise_id !== (int)$enterpriseId) {
+            return response()->json(['message' => 'Le responsable sélectionné est invalide pour cette entreprise'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         $oldName = $service->name;
         $service->name = $validated['name'];
-        $service->responsible_employee_id = $validated['responsible_employee_id'] ?? null;
+        $service->responsible_employee_id = $validated['responsible_employee_id'];
         $service->save();
 
-        if (!empty($validated['responsible_employee_id'])) {
-            $resp = Employee::find($validated['responsible_employee_id']);
-            if ($resp && (int)$resp->enterprise_id === (int)$enterpriseId) {
-                $resp->service_id = $service->id;
-                $resp->save();
-            }
-        }
+        $resp->service_id = $service->id;
+        $resp->save();
 
         if ($oldName !== $service->name) {
             try {
@@ -231,6 +230,35 @@ class AdminServiceController extends Controller
         $ids = $validated['member_ids'] ?? [];
         if (!empty($ids)) {
             Employee::whereIn('id', $ids)->where('enterprise_id', $enterpriseId)->update(['service_id' => $service->id]);
+        }
+
+        if (!Cache::has('employees_events_sequence')) {
+            Cache::forever('employees_events_sequence', 0);
+        }
+        Cache::increment('employees_events_sequence');
+
+        return response()->json(['updated' => count($ids)]);
+    }
+
+    public function removeMembers(Request $request, Service $service)
+    {
+        $user = Auth::user();
+        $enterpriseId = $user?->enterprise_id;
+        if ((int)$service->enterprise_id !== (int)$enterpriseId) {
+            return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+        }
+
+        $validated = $request->validate([
+            'member_ids' => ['array'],
+            'member_ids.*' => ['integer', 'exists:employees,id'],
+        ]);
+
+        $ids = $validated['member_ids'] ?? [];
+        if (!empty($ids)) {
+            Employee::whereIn('id', $ids)
+                ->where('enterprise_id', $enterpriseId)
+                ->where('service_id', $service->id)
+                ->update(['service_id' => null]);
         }
 
         if (!Cache::has('employees_events_sequence')) {
