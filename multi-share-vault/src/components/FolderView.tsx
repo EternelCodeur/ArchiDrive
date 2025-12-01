@@ -365,29 +365,50 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (!files.length) return;
-    if (typeof selectedDbFolderId !== 'number') {
+    let targetFolderId: number | null = typeof selectedDbFolderId === 'number' ? selectedDbFolderId : null;
+    // Fallback: if no DB folder resolved yet (e.g., root just opened), resolve root by service
+    if (targetFolderId === null && effectiveSelected && effectiveSelected.parent_id === null && typeof effectiveSelected.service_id === 'number') {
+      try {
+        const resRoots = await apiFetch(`/api/folders?service_id=${effectiveSelected.service_id}`);
+        if (resRoots.ok) {
+          const roots: FolderDto[] = await resRoots.json();
+          if (Array.isArray(roots) && roots.length > 0) targetFolderId = roots[0].id as number;
+        }
+      } catch { /* ignore */ }
+    }
+    if (typeof targetFolderId !== 'number') {
       toast.error("Veuillez sélectionner un dossier avant de téléverser");
       e.target.value = "";
       return;
     }
     try {
-      for (const file of files) {
+      const results = await Promise.allSettled(files.map(async (file) => {
         const fd = new FormData();
         fd.append('file', file);
-        fd.append('folder_id', String(selectedDbFolderId));
-        // optional explicit name keeps original
+        fd.append('folder_id', String(targetFolderId!));
         fd.append('name', file.name);
         const res = await apiFetch('/api/documents', {
           method: 'POST',
           body: fd,
-          toast: { success: { enabled: true, message: 'Fichier téléversé' }, error: { enabled: true, message: 'Échec du téléversement' } },
         });
         if (!res.ok) throw new Error('upload_failed');
+      }));
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+      if (succeeded > 0) {
+        await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
+        // Force refetch immediately
+        await queryClient.refetchQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
       }
-      await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
-      toast.info(`${files.length} fichier(s) téléversé(s)`);
+      if (failed === 0) {
+        toast.success(`${succeeded} fichier(s) téléversé(s)`);
+      } else if (succeeded > 0) {
+        toast.info(`${succeeded} téléversé(s), ${failed} échec(s)`);
+      } else {
+        toast.error(`Échec du téléversement (${failed})`);
+      }
     } catch {
-      // toasts already shown
+      toast.error('Échec du téléversement');
     } finally {
       e.target.value = "";
     }
