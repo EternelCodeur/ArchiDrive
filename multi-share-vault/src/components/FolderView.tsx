@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Upload, FolderPlus, Search, CheckSquare, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,6 +243,60 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     : (path as unknown as FolderDto[]);
   const displayPath = pathLike.map((f) => ({ ...f, name: mapRootName(f) }));
   const infoServiceId = (effectiveSelected?.service_id ?? (dbRootFolders && dbRootFolders[0]?.service_id)) ?? null;
+
+  // Search filtering
+  const hasSearch = (searchQuery || '').trim().length > 0;
+  const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  const q = norm((searchQuery || '').trim());
+  const [deepFolders, setDeepFolders] = useState<Array<FolderDto>>([]);
+  const [deepFoldersLoading, setDeepFoldersLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAllDescendants = async (rootId: number) => {
+      setDeepFoldersLoading(true);
+      try {
+        const result: FolderDto[] = [];
+        const queue: number[] = [rootId];
+        const visited = new Set<number>();
+        const LIMIT = 2000;
+        while (queue.length && result.length < LIMIT && !cancelled) {
+          const pid = queue.shift()!;
+          if (visited.has(pid)) continue;
+          visited.add(pid);
+          const res = await apiFetch(`/api/folders?parent_id=${pid}`);
+          if (!res.ok) break;
+          const children: FolderDto[] = await res.json();
+          for (const child of children) {
+            result.push(child);
+            if (typeof child.id === 'number') queue.push(child.id);
+            if (result.length >= LIMIT) break;
+          }
+        }
+        if (!cancelled) setDeepFolders(result);
+      } catch {
+        if (!cancelled) setDeepFolders([]);
+      } finally {
+        if (!cancelled) setDeepFoldersLoading(false);
+      }
+    };
+    if (hasSearch && typeof selectedDbFolderId === 'number') {
+      loadAllDescendants(selectedDbFolderId);
+    } else {
+      setDeepFolders([]);
+      setDeepFoldersLoading(false);
+    }
+    return () => { cancelled = true; };
+  }, [hasSearch, selectedDbFolderId]);
+  const searchFolderSource = hasSearch ? deepFolders : displaySubfolders;
+  const filteredSubfolders = useMemo(() => {
+    if (!hasSearch) return searchFolderSource;
+    return searchFolderSource.filter(f => norm(f.name).includes(q));
+  }, [hasSearch, q, searchFolderSource]);
+  const filteredDocuments = useMemo(() => {
+    if (!hasSearch) return uiDocuments;
+    return uiDocuments.filter(d => norm(d.name).includes(q));
+  }, [hasSearch, q, uiDocuments]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -776,10 +830,10 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         ) : (
           <div className="space-y-6">
             {/* Folders */}
-            {displaySubfolders.length > 0 && (
+            {filteredSubfolders.length > 0 && (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                  {displaySubfolders.map((folder) => (
+                  {filteredSubfolders.map((folder) => (
                     <FolderItem
                       key={folder.id}
                       folder={{ ...folder, name: renamedFolders[folder.id] ?? folder.name }}
@@ -796,10 +850,10 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
             )}
 
             {/* Documents */}
-            {uiDocuments.length > 0 && (
+            {filteredDocuments.length > 0 && (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 space-y-2">
-                  {uiDocuments.map((doc) => (
+                  {filteredDocuments.map((doc) => (
                     <FileItem
                       key={doc.id}
                       document={doc}
@@ -814,6 +868,12 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
                     />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {hasSearch && filteredSubfolders.length === 0 && filteredDocuments.length === 0 && (
+              <div className="text-sm text-muted-foreground p-8 text-center">
+                Aucun résultat pour « {searchQuery} »
               </div>
             )}
           </div>
