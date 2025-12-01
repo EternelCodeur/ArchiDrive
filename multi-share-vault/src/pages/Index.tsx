@@ -130,10 +130,13 @@ const Index = () => {
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
           <SheetContent side="left" className="p-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900/90 text-slate-100">
             {/* A11y: Hidden header to satisfy DialogContent requirements */}
-            
+            <SheetHeader>
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <SheetDescription className="sr-only">Menu latéral de navigation</SheetDescription>
+            </SheetHeader>
             <div className="h-full flex flex-col">
               <div className="border-b border-slate-700/60 px-4 h-16 flex items-center gap-2">
-                <img src="logo-archi.png" alt="ArchiDrive" className="h-6 w-6 object-contain" />
+                <img src="/logo-archi.png" alt="ArchiDrive" className="h-6 w-6 object-contain" />
                 <span className="text-sm font-semibold tracking-tight">{currentEnterpriseName ?? 'Navigation'}</span>
               </div>
               <div className="flex-1 overflow-y-auto px-2 py-4">
