@@ -105,19 +105,25 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
       staleTime: 60_000,
     });
     const root = (roots ?? [])[0];
-    const { data: children } = useQuery<FolderType[]>({
-      queryKey: ['folders-by-parent', root?.id ?? 0],
-      enabled: typeof root?.id === 'number' && isExpanded,
+    // Fetch currentFolder to know which service it belongs to
+    const { data: currentFolder } = useQuery<FolderType | null>({
+      queryKey: ['folder-by-id', currentFolderId ?? 0],
+      enabled: typeof currentFolderId === 'number',
       queryFn: async () => {
-        const res = await apiFetch(`/api/folders?parent_id=${root!.id}`);
-        if (!res.ok) return [] as FolderType[];
+        const res = await apiFetch(`/api/folders/${currentFolderId}`);
+        if (!res.ok) return null;
         return res.json();
       },
       staleTime: 30_000,
     });
-
+    // We don't render children in the sidebar (service-only level)
     const isActive = typeof root?.id === 'number' && currentFolderId === root.id;
-    const hasChildren = (children?.length ?? 0) > 0;
+
+    // Auto-sync expansion with current folder's service
+    useEffect(() => {
+      const belongsToThisService = (currentFolder?.service_id ?? null) === service.id;
+      setIsExpanded(belongsToThisService);
+    }, [currentFolder?.service_id, service.id]);
 
     return (
       <div>
@@ -129,11 +135,16 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
           }`}
           style={{ paddingLeft: `12px` }}
           onClick={() => {
-            if (typeof root?.id === 'number') {
-              // Always toggle expansion; children will be fetched when expanded
-              setIsExpanded((v) => !v);
-              onFolderClick(root.id);
+            if (typeof root?.id !== 'number') return;
+            if (isExpanded) {
+              // Collapse only, and close the related tab/breadcrumb (prefer current folder)
+              setIsExpanded(false);
+              if (onCloseTabByFolderId) onCloseTabByFolderId(typeof currentFolderId === 'number' ? currentFolderId : root.id!);
+              return;
             }
+            // Expand and navigate to service root
+            setIsExpanded(true);
+            onFolderClick(root.id);
           }}
         >
           {isExpanded ? (
@@ -143,21 +154,7 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
           )}
           <span className="text-sm truncate flex-1">{service.name}</span>
         </div>
-        {isExpanded && (
-          <div>
-            {(children ?? []).map((f) => (
-              <TreeNode
-                key={f.id}
-                folder={f}
-                level={1}
-                onFolderClick={onFolderClick}
-                currentFolderId={currentFolderId}
-                externalCollapseId={externalCollapseId}
-                onCloseTabByFolderId={onCloseTabByFolderId}
-              />
-            ))}
-          </div>
-        )}
+        {/* No subfolders rendered under services in the sidebar */}
       </div>
     );
   };

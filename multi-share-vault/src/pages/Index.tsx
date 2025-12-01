@@ -6,8 +6,10 @@ import { OpenTab } from "@/types";
 import type { Folder as FolderDto } from "@/types";
 import { getFolderById } from "@/data/mockData";
 import { apiFetch } from "@/lib/api";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { FolderTree } from "@/components/FolderTree";
+import { useAuth } from "@/contexts/AuthContext";
+import { mockEnterprises } from "@/data/mockData";
 
 const Index = () => {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
@@ -15,8 +17,17 @@ const Index = () => {
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [collapseFolderId, setCollapseFolderId] = useState<number | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+  const { user } = useAuth();
+  const currentEnterpriseName =
+    user && user.role !== 'super_admin'
+      ? (user.enterprise_name ?? (user.enterprise_id ? (mockEnterprises.find((e) => e.id === user.enterprise_id)?.name ?? null) : null))
+      : null;
 
   const handleFolderClick = async (folderId: number) => {
+    // Collapse the previously active folder in the sidebar
+    if (currentFolderId !== null) {
+      setCollapseFolderId(currentFolderId);
+    }
     setCurrentFolderId(folderId);
     
     const existingTab = openTabs.find((tab) => tab.folderId === folderId);
@@ -117,11 +128,13 @@ const Index = () => {
         </div>
 
         <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-          <SheetContent side="left" className="p-0">
+          <SheetContent side="left" className="p-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900/90 text-slate-100">
+            {/* A11y: Hidden header to satisfy DialogContent requirements */}
+            
             <div className="h-full flex flex-col">
-              <div className="border-b px-4 h-16 flex items-center gap-2">
+              <div className="border-b border-slate-700/60 px-4 h-16 flex items-center gap-2">
                 <img src="logo-archi.png" alt="ArchiDrive" className="h-6 w-6 object-contain" />
-                <span className="text-sm font-semibold tracking-tight">Navigation</span>
+                <span className="text-sm font-semibold tracking-tight">{currentEnterpriseName ?? 'Navigation'}</span>
               </div>
               <div className="flex-1 overflow-y-auto px-2 py-4">
                 <FolderTree onFolderClick={(id) => { handleFolderClick(id); setMobileSidebarOpen(false); }} currentFolderId={currentFolderId} externalCollapseId={collapseFolderId} onCloseTabByFolderId={handleCloseTabByFolderId} />

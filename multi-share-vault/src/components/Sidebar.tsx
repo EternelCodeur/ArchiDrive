@@ -49,7 +49,7 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
     <aside
       className={`${
         isCollapsed ? "w-16" : "w-60"
-      } border-r bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900/90 text-slate-100 flex flex-col transition-all duration-300 sticky top-16 self-start h-[calc(100vh-4rem)]`}
+      } border-r bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900/90 text-slate-100 flex flex-col transition-all duration-300 sticky top-0 self-start h-screen`}
     >
       {/* Header */}
       <div className="h-16 border-b border-slate-700/60 flex items-center px-4 gap-2">
