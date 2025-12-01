@@ -1,4 +1,4 @@
-import { FileText, Eye, MoreVertical, Share2, CheckSquare, Pencil } from "lucide-react";
+import { FileText, Eye, MoreVertical, Share2, CheckSquare, Pencil, Download, Trash2 } from "lucide-react";
 import { Document } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,14 +15,17 @@ interface FileItemProps {
   onToggleSelect?: () => void;
   onView?: () => void;
   onShare?: () => void;
-   onRename?: () => void;
+  onRename?: () => void;
+  onDownload?: () => void;
+  onDelete?: () => void;
 }
 
 const getFileIcon = (type: string) => {
   return <FileText className="w-5 h-5 text-primary" />;
 };
 
-export const FileItem = ({ document, selectionMode, selected, onToggleSelect, onView, onShare, onRename }: FileItemProps) => {
+export const FileItem = ({ document, selectionMode, selected, onToggleSelect, onView, onShare, onRename, onDownload, onDelete }: FileItemProps) => {
+  const displayName = document.name.replace(/\.[^.]+$/, '');
   return (
     <div className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border hover:border-primary/30 hover:bg-accent/50 transition-all group">
       <div className="flex-shrink-0 w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
@@ -31,7 +34,7 @@ export const FileItem = ({ document, selectionMode, selected, onToggleSelect, on
       
       <div className="flex-1 min-w-0">
         <h4 className="font-medium text-sm text-foreground truncate">
-          {document.name}
+          {displayName}
         </h4>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{document.size}</span>
@@ -58,7 +61,7 @@ export const FileItem = ({ document, selectionMode, selected, onToggleSelect, on
             <Button
               variant="ghost"
               size="icon"
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="group-hover:opacity-100 transition-opacity"
               type="button"
             >
               <MoreVertical className="w-4 h-4" />
@@ -69,13 +72,17 @@ export const FileItem = ({ document, selectionMode, selected, onToggleSelect, on
               <Eye className="w-4 h-4 mr-2" />
               Voir
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onShare}>
-              <Share2 className="w-4 h-4 mr-2" />
-              Partager
+            <DropdownMenuItem onClick={onDownload}>
+              <Download className="w-4 h-4 mr-2" />
+              Télécharger
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onRename}>
               <Pencil className="w-4 h-4 mr-2" />
               Renommer
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDelete}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Supprimer
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

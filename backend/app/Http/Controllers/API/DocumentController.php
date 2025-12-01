@@ -1,0 +1,342 @@
+<?php
+
+namespace App\Http\Controllers\API;
+
+use App\Http\Controllers\Controller;
+use App\Models\Document;
+use App\Models\Folder;
+use App\Models\Service;
+use App\Models\Enterprise;
+use App\Models\Employee;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\File as FileRule;
+
+class DocumentController extends Controller
+{
+    private function buildBaseEnterprisePath(int $serviceId): string
+    {
+        $base = 'enterprises/entreprise';
+        $service = Service::find($serviceId);
+        if ($service && $service->enterprise_id) {
+            $ent = Enterprise::find($service->enterprise_id);
+            if ($ent) {
+                $base = !empty($ent->folder_path)
+                    ? trim($ent->folder_path, '/')
+                    : ('enterprises/' . Str::slug($ent->name ?? 'entreprise'));
+            }
+        }
+        return $base;
+    }
+
+    private function buildFolderDirPath(?Folder $folder, ?Service $service): string
+    {
+        // base/ service-slug / [subfolders slugs]
+        $serviceDir = $service ? Str::slug($service->name) : 'service';
+        $segments = [$serviceDir];
+        if ($folder) {
+            // climb to root to collect chain
+            $chain = [];
+            $cur = $folder;
+            while ($cur) {
+                array_unshift($chain, $cur->name);
+                if ($cur->parent_id === null) break;
+                $cur = Folder::find($cur->parent_id);
+                if (!$cur) break;
+            }
+            // Always drop the DB root folder segment to avoid duplicating service name in path
+            if (!empty($chain)) {
+                array_shift($chain);
+            }
+            // slugify remaining folder names (subfolders only)
+            foreach ($chain as $seg) {
+                $segments[] = Str::slug($seg);
+            }
+        }
+        return implode('/', $segments);
+    }
+
+    public function index(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+
+        $folderId = $request->query('folder_id');
+        $serviceId = $request->query('service_id');
+
+        // Permission context
+        $ctxServiceId = null;
+        if ($folderId) {
+            $folder = Folder::find($folderId);
+            if (!$folder) return response()->json([]);
+            $ctxServiceId = $folder->service_id;
+        } elseif ($serviceId) {
+            $ctxServiceId = (int)$serviceId;
+        }
+
+        if ($ctxServiceId) {
+            if ($user->role === 'admin') {
+                $svc = Service::find($ctxServiceId);
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            }
+            if ($user->role === 'agent') {
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp || (int)$emp->service_id !== (int)$ctxServiceId) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            }
+        }
+
+        $query = Document::query();
+        if ($folderId) $query->where('folder_id', $folderId);
+        if ($serviceId) $query->where('service_id', $serviceId);
+        return response()->json($query->orderByDesc('id')->get());
+    }
+
+    public function store(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+
+        $validated = $request->validate([
+            'file' => ['required', FileRule::default()->max(1024 * 1024 * 100)], // 100MB max
+            'folder_id' => ['nullable', 'integer', 'exists:folders,id'],
+            'service_id' => ['nullable', 'integer', 'exists:services,id'],
+            'name' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $folder = null;
+        $service = null;
+        $serviceId = $validated['service_id'] ?? null;
+        $folderId = $validated['folder_id'] ?? null;
+        if ($folderId) {
+            $folder = Folder::find($folderId);
+            $serviceId = $folder ? $folder->service_id : $serviceId;
+        }
+        if (!$serviceId) return response()->json(['message' => 'service_id is required if folder_id is null'], 422);
+        $service = Service::find($serviceId);
+
+        // Permissions
+        if ($user->role === 'admin') {
+            $svc = $service;
+            if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+
+        $uploaded = $validated['file'];
+        $original = $validated['name'] ?? $uploaded->getClientOriginalName();
+        $safeName = Str::slug(pathinfo($original, PATHINFO_FILENAME));
+        $ext = strtolower($uploaded->getClientOriginalExtension());
+        $finalName = $ext ? ($safeName . '.' . $ext) : $safeName;
+
+        $base = $this->buildBaseEnterprisePath($serviceId);
+        $dirRel = $this->buildFolderDirPath($folder, $service);
+        $fullDir = $base . '/' . $dirRel;
+
+        // Ensure directory exists
+        Storage::disk('local')->makeDirectory($fullDir);
+        // Store file
+        Storage::disk('local')->putFileAs($fullDir, $uploaded, $finalName);
+        $relPath = $fullDir . '/' . $finalName;
+
+        $doc = Document::create([
+            'name' => $original,
+            'folder_id' => $folder?->id,
+            'service_id' => $serviceId,
+            'enterprise_id' => $service?->enterprise_id,
+            'file_path' => $relPath,
+            'mime_type' => $uploaded->getClientMimeType(),
+            'size_bytes' => $uploaded->getSize(),
+            'created_by' => $user->id,
+        ]);
+
+        return response()->json($doc, Response::HTTP_CREATED);
+    }
+
+    public function show(Document $document)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+        // Permissions
+        $serviceId = $document->service_id;
+        if ($user->role === 'admin') {
+            $svc = Service::find($serviceId);
+            if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+        return response()->json($document);
+    }
+
+    public function update(Request $request, Document $document)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
+            'folder_id' => ['nullable', 'integer', 'exists:folders,id'],
+        ]);
+
+        // Permissions
+        $serviceId = $document->service_id;
+        if ($user->role === 'admin') {
+            $svc = Service::find($serviceId);
+            if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+
+        $oldPath = $document->file_path;
+        $oldDir = trim(dirname($oldPath), '/\\');
+
+        $targetFolder = $document->folder_id ? Folder::find($document->folder_id) : null;
+        if (array_key_exists('folder_id', $validated)) {
+            $targetFolder = $validated['folder_id'] ? Folder::find($validated['folder_id']) : null;
+        }
+        $service = Service::find($document->service_id);
+
+        // Build target dir (may be same)
+        $base = $this->buildBaseEnterprisePath($document->service_id);
+        $dirRel = $this->buildFolderDirPath($targetFolder, $service);
+        $newDir = $base . '/' . $dirRel;
+
+        $filename = basename($oldPath);
+        if (!empty($validated['name'])) {
+            $orig = $validated['name'];
+            $safe = Str::slug(pathinfo($orig, PATHINFO_FILENAME));
+            $ext = pathinfo($filename, PATHINFO_EXTENSION);
+            $filename = $ext ? ($safe . '.' . strtolower($ext)) : $safe;
+            $document->name = $orig;
+        }
+
+        // Ensure new directory exists
+        Storage::disk('local')->makeDirectory($newDir);
+        $newPath = $newDir . '/' . $filename;
+
+        try {
+            if ($oldPath !== $newPath && Storage::disk('local')->exists($oldPath)) {
+                Storage::disk('local')->move($oldPath, $newPath);
+            } elseif (!Storage::disk('local')->exists($newPath) && Storage::disk('local')->exists($oldPath)) {
+                // same dir but name change
+                Storage::disk('local')->move($oldPath, $newPath);
+            }
+        } catch (\Throwable $e) { /* ignore fs errors */ }
+
+        // Persist
+        $document->folder_id = $targetFolder?->id;
+        $document->file_path = $newPath;
+        $document->save();
+
+        return response()->json($document);
+    }
+
+    public function destroy(Document $document)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+
+        // Permissions
+        $serviceId = $document->service_id;
+        if ($user->role === 'admin') {
+            $svc = Service::find($serviceId);
+            if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+
+        // Delete file
+        try {
+            if ($document->file_path && Storage::disk('local')->exists($document->file_path)) {
+                Storage::disk('local')->delete($document->file_path);
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
+        $document->delete();
+        return response()->json(null, Response::HTTP_NO_CONTENT);
+    }
+
+    public function download(Document $document)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+
+        $serviceId = $document->service_id;
+        if ($user->role === 'admin') {
+            $svc = Service::find($serviceId);
+            if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            }
+        }
+
+        if (!$document->file_path || !Storage::disk('local')->exists($document->file_path)) {
+            return response()->json(['message' => 'File not found'], 404);
+        }
+        // Resolve absolute path in a cross-platform way
+        $fullPath = null;
+        try {
+            if (method_exists(Storage::disk('local'), 'path')) {
+                $fullPath = Storage::disk('local')->path($document->file_path);
+            }
+        } catch (\Throwable $e) { $fullPath = null; }
+
+        $mime = $document->mime_type ?: 'application/octet-stream';
+        if ($fullPath && file_exists($fullPath)) {
+            // Prefer native file response when absolute path is known
+            $detected = @mime_content_type($fullPath) ?: $mime;
+            return response()->file($fullPath, [
+                'Content-Type' => $detected,
+                'Content-Disposition' => 'inline; filename="' . basename($fullPath) . '"'
+            ]);
+        }
+
+        // Fallback: stream from storage (works even if absolute path resolution fails on Windows)
+        $stream = Storage::disk('local')->readStream($document->file_path);
+        if ($stream === false) {
+            return response()->json(['message' => 'File not found'], 404);
+        }
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+            if (is_resource($stream)) fclose($stream);
+        }, 200, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline; filename="' . basename($document->file_path) . '"'
+        ]);
+    }
+}

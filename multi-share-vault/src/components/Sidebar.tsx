@@ -34,6 +34,16 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
     staleTime: 60_000,
   });
   const collapsedServices = (visibleServices ?? []);
+  const userService = (visibleServices ?? []).find(s => s.id === (user?.service_id ?? -1)) || null;
+
+  const openServiceRoot = async (serviceId: number) => {
+    const res = await apiFetch(`/api/folders?service_id=${serviceId}`);
+    if (res.ok) {
+      const roots: Array<{ id: number }> = await res.json();
+      const root = Array.isArray(roots) ? roots[0] : null;
+      if (root && typeof root.id === 'number') onFolderClick(root.id);
+    }
+  };
 
   return (
     <aside
@@ -99,6 +109,36 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
           </div>
         </div>
       )}
+
+      {/* Footer: shortcut to user's own service root */}
+      <div className="border-t border-slate-700/60 p-2">
+        {userService ? (
+          isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => openServiceRoot(userService.id)}
+                  className="w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors bg-blue-600 text-white hover:bg-blue-500 border-blue-400"
+                  aria-label={userService.name}
+                  title={userService.name}
+                >
+                  {(userService.name || '?').trim().charAt(0).toUpperCase()}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Mon service: {userService.name}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <button
+              onClick={() => openServiceRoot(userService.id)}
+              className="w-full text-left px-3 py-2 rounded-md bg-blue-600/20 hover:bg-blue-600/30 border border-blue-400/40 text-blue-100"
+            >
+              Mon service: <span className="font-semibold">{userService.name}</span>
+            </button>
+          )
+        ) : (
+          <div className="text-xs text-slate-400 px-1">Aucun service</div>
+        )}
+      </div>
     </aside>
   );
 };

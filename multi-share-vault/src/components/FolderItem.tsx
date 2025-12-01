@@ -12,14 +12,28 @@ interface FolderItemProps {
   onClick: () => void;
   onRename?: () => void;
   onDelete?: () => void;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export const FolderItem = ({ folder, onClick, onRename, onDelete }: FolderItemProps) => {
+export const FolderItem = ({ folder, onClick, onRename, onDelete, selectionMode, selected, onToggleSelect }: FolderItemProps) => {
   return (
     <div
-      onClick={onClick}
-      className="group relative flex flex-col items-center text-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-primary/50 hover:bg-folder-hover transition-all cursor-pointer"
+      onClick={selectionMode ? (onToggleSelect ?? onClick) : onClick}
+      className={`group relative flex flex-col items-center text-center gap-3 p-4 bg-card rounded-xl border transition-all cursor-pointer ${selected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-folder-hover'}`}
     >
+      {selectionMode && (
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={(e) => {
+            e.stopPropagation();
+            if (onToggleSelect) onToggleSelect();
+          }}
+          className="absolute left-2 top-2 w-4 h-4"
+        />
+      )}
       <div className="flex-shrink-0 w-20 h-20 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
         <Folder className="w-12 h-12 text-primary group-hover:hidden" />
         <FolderOpen className="w-12 h-12 text-primary hidden group-hover:block" />

@@ -24,8 +24,20 @@ Route::middleware('jwt')->group(function () {
     // Visible services for the authenticated user (agent/admin/super_admin)
     Route::get('/services/visible', [AdminServiceController::class, 'visible']);
 
-    // Folders CRUD (index/show/store)
-    Route::apiResource('folders', FolderController::class)->only(['index', 'show', 'store']);
+    // Folders CRUD (index/show/store/update/destroy)
+    Route::apiResource('folders', FolderController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+    // Fallback delete (for clients that can't use DELETE)
+    Route::post('/folders/delete', function (Request $request) {
+        $id = $request->input('id');
+        if (!$id) { return response()->json(['message' => 'id required'], 422); }
+        $folder = App\Models\Folder::find($id);
+        if (!$folder) { return response()->json(['message' => 'not found'], 404); }
+        return app(FolderController::class)->destroy($folder);
+    });
+
+    // Documents CRUD
+    Route::apiResource('documents', \App\Http\Controllers\API\DocumentController::class);
+    Route::get('documents/{document}/download', [\App\Http\Controllers\API\DocumentController::class, 'download']);
 
     Route::middleware('role:super_admin')->group(function () {
         Route::apiResource('super-admins', SuperAdminUserController::class);

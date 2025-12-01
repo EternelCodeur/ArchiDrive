@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { Upload, FolderPlus, Search, CheckSquare, Share2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Upload, FolderPlus, Search, CheckSquare, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -13,6 +13,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import type { Service, Folder as FolderDto } from "@/types";
+
+type BackendDocument = {
+  id: number;
+  name: string;
+  folder_id: number | null;
+  service_id: number | null;
+  enterprise_id?: number | null;
+  file_path: string;
+  mime_type: string | null;
+  size_bytes: number;
+  created_by?: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
 
 interface FolderViewProps {
   folderId: number | null;
@@ -28,8 +42,15 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
+  const [selectedFolderIds, setSelectedFolderIds] = useState<number[]>([]);
   const [shareDocumentId, setShareDocumentId] = useState<number | null>(null);
   const [shareDocumentName, setShareDocumentName] = useState<string>("");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<{ id: number; name: string } | null>(null);
+  const [previewMime, setPreviewMime] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [renamedDocuments, setRenamedDocuments] = useState<Record<number, string>>({});
   const [renamedFolders, setRenamedFolders] = useState<Record<number, string>>({});
   const [isRenameDocModalOpen, setIsRenameDocModalOpen] = useState(false);
@@ -134,7 +155,79 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     staleTime: 10_000,
   });
   const subfolders = isMockRootSelected ? (serverSubfoldersForRoots ?? []) : (typeof parentIdForServer === 'number' ? (serverSubfolders ?? []) : []);
-  const documents = folderId ? getDocumentsByFolder(folderId) : [];
+  // Resolve selected DB folder id for documents listing
+  const selectedDbFolderId = effectiveSelected
+    ? (!isMockRootSelected ? (resolvedDbFolder?.id ?? effectiveSelected.id) : (dbRootFolders && dbRootFolders[0]?.id) ?? null)
+    : null;
+  const { data: serverDocuments = [] } = useQuery<Array<BackendDocument>>({
+    queryKey: ['documents-by-folder', selectedDbFolderId ?? 0, user?.id ?? 0],
+    enabled: typeof selectedDbFolderId === 'number',
+    queryFn: async () => {
+      const res = await apiFetch(`/api/documents?folder_id=${selectedDbFolderId}`);
+      if (!res.ok) return [] as Array<BackendDocument>;
+      return res.json();
+    },
+    staleTime: 10_000,
+  });
+  // Map backend fields to UI fields (size human-readable, type from mime)
+  const uiDocuments = serverDocuments.map((doc) => {
+    const sizeBytes = Number(doc.size_bytes ?? 0);
+    const kb = sizeBytes / 1024;
+    const mb = kb / 1024;
+    const size = sizeBytes >= 1024 * 1024 ? `${mb.toFixed(1)} Mo` : `${Math.max(1, Math.ceil(kb))} Ko`;
+    const type = (doc.mime_type || '').split('/')[1] || '';
+    return {
+      id: doc.id as number,
+      name: renamedDocuments[doc.id] ?? (doc.name as string),
+      folder_id: doc.folder_id ?? (selectedDbFolderId ?? 0),
+      size,
+      created_at: doc.created_at || new Date().toISOString(),
+      author: user?.name || '',
+      type,
+    };
+  });
+
+  useEffect(() => {
+    let revoked = false;
+    const cleanup = () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
+    };
+    const run = async () => {
+      if (!isPreviewOpen || !previewDoc) return;
+      setPreviewLoading(true);
+      setPreviewMime(null);
+      setPreviewText(null);
+      cleanup();
+      try {
+        const res = await apiFetch(`/api/documents/${previewDoc.id}`);
+        if (res.ok) {
+          const meta = await res.json();
+          const mime = meta?.mime_type as string | null;
+          setPreviewMime(mime);
+          const fileRes = await fetch(`/api/documents/${previewDoc.id}/download?ts=${Date.now()}` as RequestInfo, { credentials: 'include', cache: 'no-store' as RequestCache });
+          if (fileRes.ok) {
+            if (mime && mime.startsWith('text/')) {
+              const txt = await fileRes.text();
+              setPreviewText(txt);
+            } else {
+              const blob = await fileRes.blob();
+              const url = URL.createObjectURL(blob);
+              if (!revoked) setPreviewUrl(url);
+            }
+          }
+        }
+      } catch { /* ignore */ }
+      finally { setPreviewLoading(false); }
+    };
+    run();
+    return () => {
+      revoked = true;
+      cleanup();
+    };
+  }, [isPreviewOpen, previewDoc, previewUrl]);
   const path = folderId ? getFolderPath(folderId) : [];
   const svcNameById = new Map((visibleServices ?? []).map((s) => [s.id, s.name]));
   const mapRootName = (f: { parent_id: number | null; service_id: number | null; name: string }) =>
@@ -269,15 +362,35 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (!files.length) return;
-
-    toast.success(`${files.length} fichier(s) sélectionné(s)`, {
-      description: "Les fichiers seront ajoutés au dossier (simulation).",
-    });
-
-    e.target.value = "";
+    if (typeof selectedDbFolderId !== 'number') {
+      toast.error("Veuillez sélectionner un dossier avant de téléverser");
+      e.target.value = "";
+      return;
+    }
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('folder_id', String(selectedDbFolderId));
+        // optional explicit name keeps original
+        fd.append('name', file.name);
+        const res = await apiFetch('/api/documents', {
+          method: 'POST',
+          body: fd,
+          toast: { success: { enabled: true, message: 'Fichier téléversé' }, error: { enabled: true, message: 'Échec du téléversement' } },
+        });
+        if (!res.ok) throw new Error('upload_failed');
+      }
+      await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
+      toast.info(`${files.length} fichier(s) téléversé(s)`);
+    } catch {
+      // toasts already shown
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const toggleDocumentSelection = (id: number) => {
@@ -286,10 +399,39 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     );
   };
 
-  const handleViewDocument = (name: string) => {
-    toast.info(`Aperçu de "${name}"`, {
-      description: "La prévisualisation avancée sera ajoutée plus tard (simulation).",
-    });
+  const toggleFolderSelection = (id: number) => {
+    setSelectedFolderIds((prev) =>
+      prev.includes(id) ? prev.filter((fid) => fid !== id) : [...prev, id]
+    );
+  };
+
+  const handleViewDocument = (id: number, name: string) => {
+    setPreviewDoc({ id, name });
+    setIsPreviewOpen(true);
+  };
+
+  const handleDownloadDocument = (id: number, name: string) => {
+    const a = document.createElement('a');
+    a.href = `/api/documents/${id}/download`;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDeleteDocument = async (id: number) => {
+    try {
+      const res = await apiFetch(`/api/documents/${id}`, {
+        method: 'DELETE',
+        toast: { success: { enabled: true, message: 'Document supprimé' }, error: { enabled: true, message: 'Échec de la suppression' } },
+      });
+      if (!res.ok) throw new Error('delete_failed');
+      if (typeof selectedDbFolderId === 'number') {
+        await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
+      }
+    } catch {
+      // toast already shown by apiFetch
+    }
   };
 
   const handleShareDocument = (id: number, name: string) => {
@@ -300,7 +442,9 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
 
   const openRenameDocument = (id: number, name: string) => {
     setCurrentDocToRename({ id, name });
-    setRenameInput(renamedDocuments[id] ?? name);
+    const currentName = renamedDocuments[id] ?? name;
+    const base = currentName.replace(/\.[^.]+$/, '');
+    setRenameInput(base);
     setIsRenameDocModalOpen(true);
   };
 
@@ -316,12 +460,25 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     const value = renameInput.trim();
     if (!value) return;
 
-    setRenamedDocuments((prev) => ({ ...prev, [currentDocToRename.id]: value }));
-    toast.success("Document renommé", {
-      description: `"${currentDocToRename.name}" est maintenant "${value}" (simulation).`,
-    });
-    setIsRenameDocModalOpen(false);
-    setCurrentDocToRename(null);
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/documents/${currentDocToRename.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: value }),
+          toast: { success: { enabled: true, message: 'Document renommé' }, error: { enabled: true, message: "Échec du renommage" } },
+        });
+        if (!res.ok) throw new Error('rename_failed');
+        if (typeof selectedDbFolderId === 'number') {
+          await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
+        }
+      } catch {
+        return;
+      } finally {
+        setIsRenameDocModalOpen(false);
+        setCurrentDocToRename(null);
+      }
+    })();
   };
 
   const handleConfirmRenameFolder = (e: React.FormEvent) => {
@@ -330,19 +487,67 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     const value = renameInput.trim();
     if (!value) return;
 
-    setRenamedFolders((prev) => ({ ...prev, [currentFolderToRename.id]: value }));
-    toast.success("Dossier renommé", {
-      description: `"${currentFolderToRename.name}" est maintenant "${value}" (simulation).`,
-    });
-    setIsRenameFolderModalOpen(false);
-    setCurrentFolderToRename(null);
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/folders/${currentFolderToRename.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: value }),
+          toast: { success: { enabled: true, message: 'Dossier renommé' }, error: { enabled: true, message: "Échec du renommage" } },
+        });
+        if (!res.ok) throw new Error('rename_failed');
+
+        // Clear any local temporary rename
+        setRenamedFolders((prev) => ({ ...prev, [currentFolderToRename.id]: undefined as unknown as string }));
+
+        // Invalidate folder lists
+        const parentKey = typeof parentIdForServer === 'number' ? parentIdForServer : undefined;
+        if (typeof parentKey === 'number') {
+          await queryClient.invalidateQueries({ queryKey: ['folders-by-parent', parentKey, user?.id ?? 0] });
+        }
+        if (isMockRootSelected) {
+          await queryClient.invalidateQueries({ queryKey: ['folders-by-parents'] });
+        }
+      } catch {
+        return;
+      } finally {
+        setIsRenameFolderModalOpen(false);
+        setCurrentFolderToRename(null);
+      }
+    })();
   };
 
-  const handleDeleteFolder = (id: number, name: string) => {
-    toast.success("Dossier supprimé", {
-      description: `La suppression du dossier "${name}" est simulée pour l'instant.
-Vous pourrez brancher le backend plus tard.`,
-    });
+  const handleDeleteFolder = async (id: number, name: string) => {
+    try {
+      const res = await apiFetch(`/api/folders/${id}`, {
+        method: 'DELETE',
+        toast: { success: { enabled: true, message: 'Dossier supprimé' }, error: { enabled: true, message: "Échec de la suppression" } },
+      });
+      if (!res.ok) {
+        if (res.status === 405) {
+          const alt = await apiFetch(`/api/folders/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+            toast: { success: { enabled: true, message: 'Dossier supprimé' }, error: { enabled: true, message: "Échec de la suppression" } },
+          });
+          if (!alt.ok) throw new Error('delete_failed');
+        } else {
+          throw new Error('delete_failed');
+        }
+      }
+
+      // Invalidate folder lists
+      const parentKey = typeof parentIdForServer === 'number' ? parentIdForServer : undefined;
+      if (typeof parentKey === 'number') {
+        await queryClient.invalidateQueries({ queryKey: ['folders-by-parent', parentKey, user?.id ?? 0] });
+      }
+      if (isMockRootSelected) {
+        await queryClient.invalidateQueries({ queryKey: ['folders-by-parents'] });
+      }
+    } catch {
+      // handled by apiFetch toast
+    }
   };
 
   const handleShareSelectedDocuments = () => {
@@ -351,10 +556,50 @@ Vous pourrez brancher le backend plus tard.`,
     setShareDocumentId(selectedDocumentIds[0]);
     setShareDocumentName(
       selectedDocumentIds.length === 1
-        ? documents.find((d) => d.id === selectedDocumentIds[0])?.name || "Document"
+        ? uiDocuments.find((d) => d.id === selectedDocumentIds[0])?.name || "Document"
         : `${selectedDocumentIds.length} documents sélectionnés`
     );
     setIsShareModalOpen(true);
+  };
+
+  const handleDeleteSelectedItems = async () => {
+    if (selectedDocumentIds.length === 0 && selectedFolderIds.length === 0) {
+      toast.info('Sélectionnez des dossiers ou documents à supprimer');
+      return;
+    }
+    const parts: string[] = [];
+    if (selectedFolderIds.length > 0) parts.push(`${selectedFolderIds.length} dossier(s)`);
+    if (selectedDocumentIds.length > 0) parts.push(`${selectedDocumentIds.length} document(s)`);
+    const label = parts.join(' et ');
+    const ok = window.confirm(`Voulez-vous supprimer définitivement ${label} ?`);
+    if (!ok) return;
+    try {
+      // Delete documents first, excluding those inside selected folders
+      const selectedFolderSet = new Set(selectedFolderIds);
+      const docIdsOutsideSelectedFolders = selectedDocumentIds.filter((did) => {
+        const doc = uiDocuments.find((d) => d.id === did);
+        return doc ? !selectedFolderSet.has(doc.folder_id ?? -1) : true;
+      });
+      for (const did of docIdsOutsideSelectedFolders) {
+        const resD = await apiFetch(`/api/documents/${did}`, { method: 'DELETE' });
+        if (!resD.ok) throw new Error('delete_doc_failed');
+      }
+      // Then delete selected folders
+      for (const fid of selectedFolderIds) {
+        const resF = await apiFetch(`/api/folders/${fid}`, { method: 'DELETE' });
+        if (!resF.ok) throw new Error('delete_folder_failed');
+      }
+      if (typeof selectedDbFolderId === 'number') {
+        await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
+        await queryClient.invalidateQueries({ queryKey: ['folders-by-parent', selectedDbFolderId, user?.id ?? 0] });
+      }
+      setSelectedDocumentIds([]);
+      setSelectedFolderIds([]);
+      setSelectionMode(false);
+      toast.success('Suppression effectuée');
+    } catch {
+      toast.error('Échec de la suppression');
+    }
   };
 
   return (
@@ -400,17 +645,18 @@ Vous pourrez brancher le backend plus tard.`,
                   if (!selectionMode) {
                     setSelectionMode(true);
                     setSelectedDocumentIds([]);
-                  } else if (selectedDocumentIds.length > 0) {
-                    handleShareSelectedDocuments();
+                    setSelectedFolderIds([]);
+                  } else if (selectedDocumentIds.length > 0 || selectedFolderIds.length > 0) {
+                    handleDeleteSelectedItems();
                   } else {
                     setSelectionMode(false);
                   }
                 }}
               >
-                {selectionMode && selectedDocumentIds.length > 0 ? (
+                {selectionMode && (selectedDocumentIds.length > 0 || selectedFolderIds.length > 0) ? (
                   <>
-                    <Share2 className="w-4 h-4 md:mr-2" />
-                    <span className="hidden md:inline">Partager</span>
+                    <Trash2 className="w-4 h-4 md:mr-2" />
+                    <span className="hidden md:inline">Supprimer</span>
                   </>
                 ) : (
                   <>
@@ -434,7 +680,7 @@ Vous pourrez brancher le backend plus tard.`,
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {subfolders.length === 0 && documents.length === 0 ? (
+        {subfolders.length === 0 && uiDocuments.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3">
               <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto">
@@ -459,6 +705,9 @@ Vous pourrez brancher le backend plus tard.`,
                       onClick={() => onFolderClick(folder.id)}
                       onRename={() => openRenameFolder(folder.id, folder.name)}
                       onDelete={() => handleDeleteFolder(folder.id, folder.name)}
+                      selectionMode={selectionMode}
+                      selected={selectedFolderIds.includes(folder.id)}
+                      onToggleSelect={() => toggleFolderSelection(folder.id)}
                     />
                   ))}
                 </div>
@@ -466,18 +715,20 @@ Vous pourrez brancher le backend plus tard.`,
             )}
 
             {/* Documents */}
-            {documents.length > 0 && (
+            {uiDocuments.length > 0 && (
               <div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 space-y-2">
-                  {documents.map((doc) => (
+                  {uiDocuments.map((doc) => (
                     <FileItem
                       key={doc.id}
-                      document={{ ...doc, name: renamedDocuments[doc.id] ?? doc.name }}
+                      document={doc}
                       selectionMode={selectionMode}
                       selected={selectedDocumentIds.includes(doc.id)}
                       onToggleSelect={() => toggleDocumentSelection(doc.id)}
-                      onView={() => handleViewDocument(renamedDocuments[doc.id] ?? doc.name)}
-                      onShare={() => handleShareDocument(doc.id, renamedDocuments[doc.id] ?? doc.name)}
+                      onView={() => handleViewDocument(doc.id, doc.name)}
+                      onShare={() => handleShareDocument(doc.id, doc.name)}
+                      onDownload={() => handleDownloadDocument(doc.id, doc.name)}
+                      onDelete={() => handleDeleteDocument(doc.id)}
                       onRename={() => openRenameDocument(doc.id, doc.name)}
                     />
                   ))}
@@ -586,6 +837,40 @@ Vous pourrez brancher le backend plus tard.`,
         folderName={shareDocumentName || displayPath[displayPath.length - 1]?.name || "Document"}
         folderId={shareDocumentId || folderId || 0}
       />
+
+      {/* Preview modal */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-3xl w-full h-[220vh]">
+          <DialogHeader>
+            <DialogTitle>Prévisualisation</DialogTitle>
+            <DialogDescription>
+              {previewDoc?.name?.replace(/\.[^.]+$/, '')}
+            </DialogDescription>
+          </DialogHeader>
+          {previewLoading && <div className="text-sm text-muted-foreground">Chargement…</div>}
+          {!previewLoading && previewDoc && (
+            previewMime?.startsWith('text/') && previewText !== null ? (
+              <pre className="w-full h-full overflow-auto p-4 bg-muted rounded text-sm whitespace-pre-wrap break-words">{previewText}</pre>
+            ) : previewMime?.startsWith('image/') ? (
+              <img src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} alt={previewDoc.name} className="max-h-full max-w-full object-contain mx-auto" />
+            ) : previewMime?.startsWith('video/') ? (
+              <video src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} controls className="w-full h-full" />
+            ) : previewMime?.startsWith('audio/') ? (
+              <audio src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} controls className="w-full" />
+            ) : (previewMime?.includes('pdf')) ? (
+              <iframe src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} title={previewDoc.name} className="w-full h-full border rounded" />
+            ) : (
+              <iframe src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} title={previewDoc.name} className="w-full h-full border rounded" />
+            )
+          )}
+          <DialogFooter className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsPreviewOpen(false)}>Fermer</Button>
+            {previewDoc && (
+              <Button type="button" onClick={() => handleDownloadDocument(previewDoc.id, previewDoc.name)}>Télécharger</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

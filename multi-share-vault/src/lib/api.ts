@@ -11,7 +11,8 @@ export type ApiFetchOptions = RequestInit & {
 
 export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions = {}): Promise<Response> {
   const headers = new Headers(init.headers || {});
-  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json');
+  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  if (!headers.has('Content-Type') && init.body && !isFormData) headers.set('Content-Type', 'application/json');
   const method = (init.method || 'GET').toUpperCase();
   const isMutation = method !== 'GET';
   const shouldShowSuccess = init.toast?.success?.enabled === true || (init.toast?.always === true && !isMutation);

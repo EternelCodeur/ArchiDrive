@@ -116,6 +116,15 @@ export async function getVisibleServicesFromApi(): Promise<Service[]> {
 }
 
 export async function getEnterpriseUsersFromApi(): Promise<Employee[]> {
+  // Guard: only admins with an enterprise_id should call this endpoint
+  try {
+    const raw = sessionStorage.getItem('auth:user');
+    const user = raw ? (JSON.parse(raw) as { role?: string; enterprise_id?: number | null }) : null;
+    if (!user || user.role !== 'admin' || !user.enterprise_id) {
+      return [];
+    }
+  } catch { /* ignore */ }
+
   try {
     const res = await apiFetch('/api/admin/employees', { toast: { error: { enabled: false }, success: { enabled: false } } });
     if (!res.ok) return [];

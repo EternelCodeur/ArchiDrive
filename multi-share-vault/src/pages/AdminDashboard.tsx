@@ -41,11 +41,12 @@ const AdminDashboard = () => {
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,
-    refetchInterval: 10000,
+    refetchInterval: user?.role === "admin" && !!user?.enterprise_id ? 10000 : false,
   });
 
   const { data: employees = [] } = useQuery({
     queryKey: ["admin-employees"],
+    enabled: user?.role === "admin" && !!user?.enterprise_id,
     queryFn: async (): Promise<AdminEmployee[]> => {
       const res = await apiFetch(`/api/admin/employees`, { toast: { error: { enabled: false } } });
       if (!res.ok) {
@@ -74,7 +75,7 @@ const AdminDashboard = () => {
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,
-    refetchInterval: 10000,
+    refetchInterval: user?.role === "admin" && !!user?.enterprise_id ? 10000 : false,
   });
 
   // Formulaire Services

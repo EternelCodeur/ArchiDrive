@@ -130,7 +130,8 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
           style={{ paddingLeft: `12px` }}
           onClick={() => {
             if (typeof root?.id === 'number') {
-              if (hasChildren) setIsExpanded((v) => !v);
+              // Always toggle expansion; children will be fetched when expanded
+              setIsExpanded((v) => !v);
               onFolderClick(root.id);
             }
           }}
@@ -142,7 +143,7 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
           )}
           <span className="text-sm truncate flex-1">{service.name}</span>
         </div>
-        {isExpanded && hasChildren && (
+        {isExpanded && (
           <div>
             {(children ?? []).map((f) => (
               <TreeNode
