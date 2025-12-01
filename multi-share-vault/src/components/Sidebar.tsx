@@ -95,7 +95,7 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
                           if (root && typeof root.id === 'number') onFolderClick(root.id);
                         }
                       }}
-                      className={`w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors bg-transparent text-white hover:bg-blue-100 hover:text-blue-700 hover:border-blue-300 border-slate-500`}
+                      className={`w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors bg-black text-white border-black/60 hover:bg-blue-600 hover:text-white hover:border-blue-500`}
                       aria-label={svc.name}
                       title={svc.name}
                     >
@@ -118,7 +118,7 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
               <TooltipTrigger asChild>
                 <button
                   onClick={() => openServiceRoot(userService.id)}
-                  className="w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors bg-blue-600 text-white hover:bg-blue-500 border-blue-400"
+                  className="w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors bg-black text-white border-black/60 hover:bg-blue-600 hover:border-blue-500"
                   aria-label={userService.name}
                   title={userService.name}
                 >

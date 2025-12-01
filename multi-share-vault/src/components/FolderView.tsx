@@ -43,6 +43,9 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
   const [selectedFolderIds, setSelectedFolderIds] = useState<number[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [currentUploadingName, setCurrentUploadingName] = useState<string>("");
   const [shareDocumentId, setShareDocumentId] = useState<number | null>(null);
   const [shareDocumentName, setShareDocumentName] = useState<string>("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -51,6 +54,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewZoom, setPreviewZoom] = useState<number>(1);
   const [renamedDocuments, setRenamedDocuments] = useState<Record<number, string>>({});
   const [renamedFolders, setRenamedFolders] = useState<Record<number, string>>({});
   const [isRenameDocModalOpen, setIsRenameDocModalOpen] = useState(false);
@@ -188,11 +192,12 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   });
 
   useEffect(() => {
-    let revoked = false;
+    let cancelled = false;
+    let createdUrl: string | null = null;
     const cleanup = () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
+      if (createdUrl) {
+        try { URL.revokeObjectURL(createdUrl); } catch (e) { void e; }
+        createdUrl = null;
       }
     };
     const run = async () => {
@@ -214,8 +219,8 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
               setPreviewText(txt);
             } else {
               const blob = await fileRes.blob();
-              const url = URL.createObjectURL(blob);
-              if (!revoked) setPreviewUrl(url);
+              createdUrl = URL.createObjectURL(blob);
+              if (!cancelled) setPreviewUrl(createdUrl);
             }
           }
         }
@@ -224,10 +229,10 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     };
     run();
     return () => {
-      revoked = true;
+      cancelled = true;
       cleanup();
     };
-  }, [isPreviewOpen, previewDoc, previewUrl]);
+  }, [isPreviewOpen, previewDoc]);
   const path = folderId ? getFolderPath(folderId) : [];
   const svcNameById = new Map((visibleServices ?? []).map((s) => [s.id, s.name]));
   const mapRootName = (f: { parent_id: number | null; service_id: number | null; name: string }) =>
@@ -382,24 +387,53 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       return;
     }
     try {
-      const results = await Promise.allSettled(files.map(async (file) => {
+      setIsUploading(true);
+      setUploadProgress(0);
+      const totalBytes = files.reduce((sum, f) => sum + (f.size || 0), 0) || 1;
+      const loadedMap = new Map<string, number>();
+
+      const recomputeProgress = () => {
+        const loadedSum = Array.from(loadedMap.values()).reduce((a, b) => a + b, 0);
+        const pct = Math.min(100, Math.max(0, Math.round((loadedSum / totalBytes) * 100)));
+        setUploadProgress(pct);
+      };
+
+      const uploadFile = (file: File) => new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/documents');
+        xhr.withCredentials = true;
+        xhr.responseType = 'json';
+        xhr.upload.onprogress = (ev: ProgressEvent) => {
+          const loaded = ev.lengthComputable ? ev.loaded : 0;
+          loadedMap.set(file.name + '|' + file.size, loaded);
+          setCurrentUploadingName(file.name);
+          recomputeProgress();
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            loadedMap.set(file.name + '|' + file.size, file.size || 0);
+            recomputeProgress();
+            resolve();
+          } else {
+            reject(new Error('upload_failed'));
+          }
+        };
+        xhr.onerror = () => reject(new Error('network_error'));
         const fd = new FormData();
         fd.append('file', file);
         fd.append('folder_id', String(targetFolderId!));
         fd.append('name', file.name);
-        const res = await apiFetch('/api/documents', {
-          method: 'POST',
-          body: fd,
-        });
-        if (!res.ok) throw new Error('upload_failed');
-      }));
+        xhr.send(fd);
+      });
+
+      const results = await Promise.allSettled(files.map((f) => uploadFile(f)));
       const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.length - succeeded;
+
       if (succeeded > 0) {
         await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
-        // Force refetch immediately
         await queryClient.refetchQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
       }
+      const failed = files.length - succeeded;
       if (failed === 0) {
         toast.success(`${succeeded} fichier(s) téléversé(s)`);
       } else if (succeeded > 0) {
@@ -411,6 +445,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       toast.error('Échec du téléversement');
     } finally {
       e.target.value = "";
+      setTimeout(() => { setIsUploading(false); setUploadProgress(0); setCurrentUploadingName(""); }, 400);
     }
   };
 
@@ -429,6 +464,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const handleViewDocument = (id: number, name: string) => {
     setPreviewDoc({ id, name });
     setIsPreviewOpen(true);
+    setPreviewZoom(1);
   };
 
   const handleDownloadDocument = (id: number, name: string) => {
@@ -689,6 +725,30 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
             </div>
           </div>
 
+          {isUploading && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="truncate" title={currentUploadingName || undefined}>
+                  Téléversement… {currentUploadingName && (<>
+                    <span className="text-foreground">{currentUploadingName}</span>
+                  </>)}
+                </span>
+                <span aria-live="polite">{uploadProgress}%</span>
+              </div>
+              <div className="w-full h-2 bg-muted rounded overflow-hidden">
+                <div
+                  className="h-2 bg-primary transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                  aria-valuemin={0 as number}
+                  aria-valuemax={100 as number}
+                  aria-valuenow={uploadProgress as number}
+                  role="progressbar"
+                  aria-label="Progression du téléversement"
+                />
+              </div>
+            </div>
+          )}
+
           <Breadcrumb path={displayPath} onNavigate={onFolderClick} />
           
         </div>
@@ -860,31 +920,59 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       />
 
       {/* Preview modal */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-3xl w-full h-[220vh]">
+      <Dialog open={isPreviewOpen} onOpenChange={(open) => { setIsPreviewOpen(open); if (!open) setPreviewZoom(1); }}>
+        <DialogContent className="max-w-3xl w-full h-[100vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Prévisualisation</DialogTitle>
             <DialogDescription>
               {previewDoc?.name?.replace(/\.[^.]+$/, '')}
             </DialogDescription>
           </DialogHeader>
-          {previewLoading && <div className="text-sm text-muted-foreground">Chargement…</div>}
-          {!previewLoading && previewDoc && (
-            previewMime?.startsWith('text/') && previewText !== null ? (
-              <pre className="w-full h-full overflow-auto p-4 bg-muted rounded text-sm whitespace-pre-wrap break-words">{previewText}</pre>
-            ) : previewMime?.startsWith('image/') ? (
-              <img src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} alt={previewDoc.name} className="max-h-full max-w-full object-contain mx-auto" />
-            ) : previewMime?.startsWith('video/') ? (
-              <video src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} controls className="w-full h-full" />
-            ) : previewMime?.startsWith('audio/') ? (
-              <audio src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} controls className="w-full" />
-            ) : (previewMime?.includes('pdf')) ? (
-              <iframe src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} title={previewDoc.name} className="w-full h-full border rounded" />
-            ) : (
-              <iframe src={previewUrl ?? `/api/documents/${previewDoc.id}/download`} title={previewDoc.name} className="w-full h-full border rounded" />
-            )
-          )}
-          <DialogFooter className="flex justify-end gap-2">
+          {/* Zoom controls (when applicable) */}
+          <div className="flex items-center justify-between pb-2">
+            <div className="text-xs text-muted-foreground">{previewMime?.includes('pdf') || previewMime?.startsWith('image/') ? 'Zoom disponible' : ''}</div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setPreviewZoom((z) => Math.max(0.5, parseFloat((z - 0.1).toFixed(2))))} disabled={!(previewMime?.includes('pdf') || previewMime?.startsWith('image/'))}>−</Button>
+              <span className="text-xs w-10 text-center">{Math.round(previewZoom * 100)}%</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => setPreviewZoom((z) => Math.min(3, parseFloat((z + 0.1).toFixed(2))))} disabled={!(previewMime?.includes('pdf') || previewMime?.startsWith('image/'))}>+</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setPreviewZoom(1)} disabled={!(previewMime?.includes('pdf') || previewMime?.startsWith('image/'))}>Réinitialiser</Button>
+            </div>
+          </div>
+
+          {/* Scrollable document area */}
+          <div className="flex-1 overflow-auto rounded border bg-background p-2">
+            {previewLoading && <div className="text-sm text-muted-foreground">Chargement…</div>}
+            {!previewLoading && previewDoc && (
+              previewMime?.startsWith('text/') && previewText !== null ? (
+                <pre className="w-full h-full overflow-auto p-4 bg-muted rounded text-sm whitespace-pre-wrap break-words">{previewText}</pre>
+              ) : (
+                previewUrl ? (
+                  previewMime?.startsWith('image/') ? (
+                    <div className="w-full h-full" style={{ transform: `scale(${previewZoom})`, transformOrigin: 'top left' }}>
+                      <img src={previewUrl} alt={previewDoc.name} className="max-w-full h-auto object-contain" />
+                    </div>
+                  ) : previewMime?.startsWith('video/') ? (
+                    <video src={previewUrl} controls className="w-full h-full" />
+                  ) : previewMime?.startsWith('audio/') ? (
+                    <audio src={previewUrl} controls className="w-full" />
+                  ) : (previewMime?.includes('pdf')) ? (
+                    <div className="w-full" style={{ transform: `scale(${previewZoom})`, transformOrigin: 'top left' }}>
+                      <object data={previewUrl} type="application/pdf" className="w-full h-[1200px] border rounded">
+                        <a href={previewUrl} target="_blank" rel="noreferrer">Ouvrir le PDF</a>
+                      </object>
+                    </div>
+                  ) : (
+                    <iframe src={previewUrl} title={previewDoc.name} className="w-full h-full border rounded" />
+                  )
+                ) : (
+                  <div className="text-sm text-muted-foreground">Préparation de l’aperçu…</div>
+                )
+              )
+            )}
+          </div>
+
+          {/* Fixed footer */}
+          <DialogFooter className="mt-2">
             <Button type="button" variant="outline" onClick={() => setIsPreviewOpen(false)}>Fermer</Button>
             {previewDoc && (
               <Button type="button" onClick={() => handleDownloadDocument(previewDoc.id, previewDoc.name)}>Télécharger</Button>

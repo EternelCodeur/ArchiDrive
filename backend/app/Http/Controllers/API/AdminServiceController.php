@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Enterprise;
 use App\Models\Service;
 use App\Models\Employee;
+use App\Models\Folder;
+use App\Models\Document;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -204,8 +206,34 @@ class AdminServiceController extends Controller
             return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
         }
 
+        // Unassign employees
         Employee::where('service_id', $service->id)->update(['service_id' => null]);
 
+        // Collect all folders for this service
+        $folderIds = Folder::where('service_id', $service->id)->pluck('id')->all();
+        // Delete documents linked to those folders (filesystem + DB)
+        $docsQuery = Document::query();
+        if (!empty($folderIds)) {
+            $docsQuery->whereIn('folder_id', $folderIds);
+        }
+        // Also include documents directly attached to service without folder (safety)
+        $docsQuery->orWhere('service_id', $service->id);
+        $docs = $docsQuery->get();
+        foreach ($docs as $doc) {
+            try {
+                if ($doc->file_path && Storage::disk('local')->exists($doc->file_path)) {
+                    Storage::disk('local')->delete($doc->file_path);
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+            $doc->delete();
+        }
+
+        // Delete folders in DB
+        if (!empty($folderIds)) {
+            Folder::whereIn('id', $folderIds)->delete();
+        }
+
+        // Delete service directory on disk
         try {
             $path = $service->folder_path;
             if (!$path) {
@@ -229,9 +257,9 @@ class AdminServiceController extends Controller
             if ($path && Storage::disk('local')->exists($path)) {
                 Storage::disk('local')->deleteDirectory($path);
             }
-        } catch (\Throwable $e) {
-        }
+        } catch (\Throwable $e) {}
 
+        // Finally delete the service record
         $service->delete();
 
         if (!Cache::has('services_events_sequence')) {

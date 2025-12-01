@@ -103,8 +103,10 @@ class DocumentController extends Controller
         $user = Auth::user();
         if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
 
+        $maxMb = (int) (env('UPLOAD_MAX_MB', 500));
+        if ($maxMb <= 0) { $maxMb = 500; }
         $validated = $request->validate([
-            'file' => ['required', FileRule::default()->max(1024 * 1024 * 100)], // 100MB max
+            'file' => ['required', FileRule::default()->max(1024 * 1024 * $maxMb)], // configurable max (MB)
             'folder_id' => ['nullable', 'integer', 'exists:folders,id'],
             'service_id' => ['nullable', 'integer', 'exists:services,id'],
             'name' => ['nullable', 'string', 'max:255'],
