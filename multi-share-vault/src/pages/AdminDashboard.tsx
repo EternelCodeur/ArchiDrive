@@ -9,6 +9,7 @@ import type { AdminEmployee } from "@/types/admin";
 import type { Permission } from "@/components/admin/AdminSettingsPermissions";
 import { AdminDashboardOverview } from "@/components/admin/AdminDashboardOverview";
 import { AdminSettingsPermissions } from "@/components/admin/AdminSettingsPermissions";
+import { AdminSharedFoldersSection } from "@/components/admin/AdminSharedFoldersSection";
 import { AdminServicesSection } from "@/components/admin/AdminServicesSection";
 import { AdminEmployeesSection } from "@/components/admin/AdminEmployeesSection";
 import { useAuth } from "@/contexts/AuthContext";
@@ -434,6 +435,7 @@ const AdminDashboard = () => {
     if (activeTab === "settings") {
       return (
         <>
+          <AdminSharedFoldersSection />
           <AdminSettingsPermissions
             employees={employees}
             permissions={permissions}

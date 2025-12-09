@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { FolderTabs } from "@/components/FolderTabs";
 import { Header } from "@/components/Header";
@@ -10,6 +10,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { FolderTree } from "@/components/FolderTree";
 import { useAuth } from "@/contexts/AuthContext";
 import { mockEnterprises } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { Folder as FolderIcon, FolderOpen as FolderOpenIcon } from "lucide-react";
 
 const Index = () => {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
@@ -22,6 +24,28 @@ const Index = () => {
     user && user.role !== 'super_admin'
       ? (user.enterprise_name ?? (user.enterprise_id ? (mockEnterprises.find((e) => e.id === user.enterprise_id)?.name ?? null) : null))
       : null;
+
+  type SharedFolderSummary = { id: number; name: string; folder_id: number; visibility: 'enterprise' | 'services' };
+  const { data: sharedFolders = [] } = useQuery<SharedFolderSummary[]>({
+    queryKey: ["shared-folders", user?.id ?? 0],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/shared-folders/visible`);
+      if (!res.ok) return [] as SharedFolderSummary[];
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  const [expandedShared, setExpandedShared] = useState<Record<number, boolean>>({});
+  useEffect(() => {
+    if (typeof currentFolderId !== 'number') return;
+    const match = (sharedFolders || []).find(sf => sf.folder_id === currentFolderId);
+    if (match) setExpandedShared(prev => ({ ...prev, [match.id]: true }));
+  }, [currentFolderId, sharedFolders]);
+  useEffect(() => {
+    if (typeof collapseFolderId !== 'number') return;
+    const match = (sharedFolders || []).find(sf => sf.folder_id === collapseFolderId);
+    if (match) setExpandedShared(prev => ({ ...prev, [match.id]: false }));
+  }, [collapseFolderId, sharedFolders]);
 
   const handleFolderClick = async (folderId: number) => {
     // Collapse the previously active folder in the sidebar
@@ -140,6 +164,41 @@ const Index = () => {
                 <span className="text-sm font-semibold tracking-tight">{currentEnterpriseName ?? 'Navigation'}</span>
               </div>
               <div className="flex-1 overflow-y-auto px-2 py-4">
+                {sharedFolders.length > 0 && (
+                  <div className="mb-0">
+                    <div className="mt-2 space-y-1">
+                      {sharedFolders.map((sf) => {
+                        const isOpen = Boolean(expandedShared[sf.id]) || currentFolderId === sf.folder_id;
+                        return (
+                          <div
+                            key={sf.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                              isOpen ? "bg-blue-100 text-blue-700 font-medium" : "text-slate-100 hover:bg-blue-100 hover:text-blue-700"
+                            }`}
+                            onClick={() => {
+                              if (isOpen) {
+                                setExpandedShared((prev) => ({ ...prev, [sf.id]: false }));
+                                handleCloseTabByFolderId(sf.folder_id);
+                              } else {
+                                setExpandedShared((prev) => ({ ...prev, [sf.id]: true }));
+                                handleFolderClick(sf.folder_id);
+                                setMobileSidebarOpen(false);
+                              }
+                            }}
+                            title={sf.name}
+                          >
+                            {isOpen ? (
+                              <FolderOpenIcon className="w-4 h-4" />
+                            ) : (
+                              <FolderIcon className="w-4 h-4" />
+                            )}
+                            <span className="text-sm truncate">{sf.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <FolderTree onFolderClick={(id) => { handleFolderClick(id); setMobileSidebarOpen(false); }} currentFolderId={currentFolderId} externalCollapseId={collapseFolderId} onCloseTabByFolderId={handleCloseTabByFolderId} />
               </div>
             </div>

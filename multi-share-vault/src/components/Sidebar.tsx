@@ -1,13 +1,14 @@
 import { FolderTree } from "./FolderTree";
-import { FileText, Menu } from "lucide-react";
+import { FileText, Menu, Folder as FolderIcon, FolderOpen as FolderOpenIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { mockEnterprises } from "@/data/mockData";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import type { Service } from "@/types";
+type SharedFolderSummary = { id: number; name: string; folder_id: number; visibility: 'enterprise'|'services' };
 
 interface SidebarProps {
   onFolderClick: (folderId: number) => void;
@@ -32,6 +33,40 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
       return res.json();
     },
     staleTime: 60_000,
+  });
+  const { data: sharedFolders = [] } = useQuery<SharedFolderSummary[]>({
+    queryKey: ["shared-folders", user?.id ?? 0],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/shared-folders/visible`);
+      if (!res.ok) return [] as SharedFolderSummary[];
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  // Track expanded/open state for shared folders by shared id
+  const [expandedShared, setExpandedShared] = useState<Record<number, boolean>>({});
+  // When navigating to a shared folder, mark it open
+  useEffect(() => {
+    if (typeof currentFolderId !== 'number') return;
+    const match = (sharedFolders || []).find(sf => sf.folder_id === currentFolderId);
+    if (match) setExpandedShared(prev => ({ ...prev, [match.id]: true }));
+  }, [currentFolderId, sharedFolders]);
+  // When an external collapse targets a shared folder, close it
+  useEffect(() => {
+    if (typeof collapseFolderId !== 'number') return;
+    const match = (sharedFolders || []).find(sf => sf.folder_id === collapseFolderId);
+    if (match) setExpandedShared(prev => ({ ...prev, [match.id]: false }));
+  }, [collapseFolderId, sharedFolders]);
+  // Resolve current folder to detect which service is open in compact view
+  const { data: currentFolder } = useQuery<{ id: number; service_id: number | null } | null>({
+    queryKey: ["sidebar-current-folder", currentFolderId ?? 0],
+    enabled: typeof currentFolderId === 'number',
+    queryFn: async () => {
+      const res = await apiFetch(`/api/folders/${currentFolderId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 30_000,
   });
   const collapsedServices = (visibleServices ?? []);
   const userService = (visibleServices ?? []).find(s => s.id === (user?.service_id ?? -1)) || null;
@@ -70,10 +105,44 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
         </Button>
       </div>
 
-      {/* Folder Tree */}
+      {/* Shared folders (expanded) + Folder Tree */}
       {!isCollapsed && (
         <div className="flex-1 overflow-y-auto px-2">
-          <div className="py-4">
+          <div className="py-2">
+            {sharedFolders.length > 0 && (
+              <div className="mb-0">
+                <div className="mt-2 space-y-1">
+                  {sharedFolders.map((sf) => {
+                    const isOpen = Boolean(expandedShared[sf.id]) || currentFolderId === sf.folder_id;
+                    return (
+                      <div
+                        key={sf.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all group ${
+                          isOpen ? "bg-blue-100 text-blue-700 font-medium" : "text-slate-100 hover:bg-blue-100 hover:text-blue-700"
+                        }`}
+                        onClick={() => {
+                          if (isOpen) {
+                            setExpandedShared(prev => ({ ...prev, [sf.id]: false }));
+                            if (onCloseTabByFolderId) onCloseTabByFolderId(sf.folder_id);
+                          } else {
+                            setExpandedShared(prev => ({ ...prev, [sf.id]: true }));
+                            onFolderClick(sf.folder_id);
+                          }
+                        }}
+                        title={sf.name}
+                      >
+                        {isOpen ? (
+                          <FolderOpenIcon className="w-4 h-4 flex-shrink-0" />
+                        ) : (
+                          <FolderIcon className="w-4 h-4 flex-shrink-0" />
+                        )}
+                        <span className="text-sm truncate flex-1">{sf.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <FolderTree onFolderClick={onFolderClick} currentFolderId={currentFolderId} externalCollapseId={collapseFolderId} onCloseTabByFolderId={onCloseTabByFolderId} />
           </div>
         </div>
@@ -81,13 +150,48 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
       {isCollapsed && (
         <div className="flex-1 overflow-y-auto px-2">
           <div className="py-4 flex flex-col items-center gap-3">
+            {sharedFolders.map((sf) => {
+              const isOpen = Boolean(expandedShared[sf.id]) || currentFolderId === sf.folder_id;
+              return (
+                <Tooltip key={`sf-${sf.id}`}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => {
+                        if (isOpen) {
+                          setExpandedShared(prev => ({ ...prev, [sf.id]: false }));
+                          if (onCloseTabByFolderId) onCloseTabByFolderId(sf.folder_id);
+                        } else {
+                          setExpandedShared(prev => ({ ...prev, [sf.id]: true }));
+                          onFolderClick(sf.folder_id);
+                        }
+                      }}
+                      className={`w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors ${
+                        isOpen ? "bg-blue-600/20 text-white border-blue-500" : "bg-black text-white border-black/60 hover:bg-blue-600 hover:border-blue-500"
+                      }`}
+                      aria-label={sf.name}
+                      title={sf.name}
+                    >
+                      {isOpen ? <FolderOpenIcon className="w-4 h-4" /> : <FolderIcon className="w-4 h-4" />}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{sf.name}</TooltipContent>
+                </Tooltip>
+              );
+            })}
             {collapsedServices.map((svc) => {
               const letter = (svc.name || "?").trim().charAt(0).toUpperCase();
+              const isServiceOpen = (currentFolder?.service_id ?? null) === svc.id;
               return (
                 <Tooltip key={svc.id}>
                   <TooltipTrigger asChild>
                     <button
                       onClick={async () => {
+                        if (isServiceOpen) {
+                          if (onCloseTabByFolderId && typeof currentFolderId === 'number') {
+                            onCloseTabByFolderId(currentFolderId);
+                          }
+                          return;
+                        }
                         const res = await apiFetch(`/api/folders?service_id=${svc.id}`);
                         if (res.ok) {
                           const roots: Array<{ id: number }> = await res.json();
@@ -95,7 +199,9 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
                           if (root && typeof root.id === 'number') onFolderClick(root.id);
                         }
                       }}
-                      className={`w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors bg-black text-white border-black/60 hover:bg-blue-600 hover:text-white hover:border-blue-500`}
+                      className={`w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors ${
+                        isServiceOpen ? "bg-blue-600/20 text-white border-blue-500" : "bg-black text-white border-black/60 hover:bg-blue-600 hover:text-white hover:border-blue-500"
+                      }`}
                       aria-label={svc.name}
                       title={svc.name}
                     >
@@ -109,36 +215,6 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
           </div>
         </div>
       )}
-
-      {/* Footer: shortcut to user's own service root */}
-      <div className="border-t border-slate-700/60 p-2">
-        {userService ? (
-          isCollapsed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => openServiceRoot(userService.id)}
-                  className="w-10 h-10 rounded-md flex items-center justify-center font-semibold shadow-sm border transition-colors bg-black text-white border-black/60 hover:bg-blue-600 hover:border-blue-500"
-                  aria-label={userService.name}
-                  title={userService.name}
-                >
-                  {(userService.name || '?').trim().charAt(0).toUpperCase()}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Mon service: {userService.name}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <button
-              onClick={() => openServiceRoot(userService.id)}
-              className="w-full text-left px-3 py-2 rounded-md bg-blue-600/20 hover:bg-blue-600/30 border border-blue-400/40 text-blue-100"
-            >
-              Mon service: <span className="font-semibold">{userService.name}</span>
-            </button>
-          )
-        ) : (
-          <div className="text-xs text-slate-400 px-1">Aucun service</div>
-        )}
-      </div>
     </aside>
   );
 };

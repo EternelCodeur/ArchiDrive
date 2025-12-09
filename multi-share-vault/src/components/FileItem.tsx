@@ -68,19 +68,19 @@ export const FileItem = ({ document, selectionMode, selected, onToggleSelect, on
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onView}>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onView && onView(); }}>
               <Eye className="w-4 h-4 mr-2" />
               Voir
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onDownload}>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onDownload && onDownload(); }}>
               <Download className="w-4 h-4 mr-2" />
               Télécharger
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onRename}>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onRename && onRename(); }}>
               <Pencil className="w-4 h-4 mr-2" />
               Renommer
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onDelete}>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onDelete && onDelete(); }}>
               <Trash2 className="w-4 h-4 mr-2" />
               Supprimer
             </DropdownMenuItem>

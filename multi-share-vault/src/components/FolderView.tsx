@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Upload, FolderPlus, Search, CheckSquare, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { FolderItem } from "./FolderItem";
@@ -71,6 +72,29 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       return res.json();
     },
     staleTime: 60_000,
+  });
+  type SharedFolderSummary = { id: number; name: string; folder_id: number; visibility: 'enterprise'|'services' };
+  const { data: sharedFolders = [] } = useQuery<SharedFolderSummary[]>({
+    queryKey: ["shared-folders", user?.id ?? 0],
+    enabled: !!user,
+    queryFn: async () => {
+      const res = await apiFetch(`/api/shared-folders/visible`);
+      if (!res.ok) return [] as SharedFolderSummary[];
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  const { data: adminServices = [] } = useQuery<Service[]>({
+    queryKey: ["admin-services"],
+    enabled: !!user && (user.role === 'admin' || user.role === 'super_admin'),
+    queryFn: async () => {
+      const res = await apiFetch(`/api/admin/services`, { toast: { error: { enabled: false } } });
+      if (!res.ok) throw new Error("Erreur chargement services");
+      return res.json();
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
   
   const selectedFolder = folderId ? getFolderById(folderId) : null;
@@ -163,6 +187,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const selectedDbFolderId = effectiveSelected
     ? (!isMockRootSelected ? (resolvedDbFolder?.id ?? effectiveSelected.id) : (dbRootFolders && dbRootFolders[0]?.id) ?? null)
     : null;
+  const sharedRecordForCurrent = typeof selectedDbFolderId === 'number' ? (sharedFolders.find(sf => sf.folder_id === selectedDbFolderId) ?? null) : null;
   const { data: serverDocuments = [] } = useQuery<Array<BackendDocument>>({
     queryKey: ['documents-by-folder', selectedDbFolderId ?? 0, user?.id ?? 0],
     enabled: typeof selectedDbFolderId === 'number',
@@ -411,6 +436,43 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const handleUploadClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
+    }
+  };
+
+  // Share / Unshare current folder (admin only)
+  const [isShareFolderModalOpen, setIsShareFolderModalOpen] = useState(false);
+  const [shareVisibility, setShareVisibility] = useState<"enterprise"|"services">("enterprise");
+  const [shareServiceIds, setShareServiceIds] = useState<number[]>([]);
+  const toggleShareService = (id: number, checked: boolean) => {
+    setShareServiceIds(prev => checked ? [...prev, id] : prev.filter(s => s !== id));
+  };
+  const canShareHere = !!user && (user.role === 'admin' || user.role === 'super_admin') && typeof selectedDbFolderId === 'number' && !isMockRootSelected;
+  const handleLinkShare = async () => {
+    if (!canShareHere) return;
+    try {
+      const payload: any = { folder_id: selectedDbFolderId, visibility: shareVisibility };
+      if (shareVisibility === 'services') payload.services = shareServiceIds;
+      const res = await apiFetch(`/api/admin/shared-folders/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        toast: { success: { message: 'Dossier partagé' } },
+      });
+      if (!res.ok) throw new Error('share_failed');
+      setIsShareFolderModalOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ['shared-folders'] });
+    } catch {
+      // toast handled by apiFetch if any
+    }
+  };
+  const handleUnshare = async () => {
+    if (!canShareHere || !sharedRecordForCurrent) return;
+    try {
+      const res = await apiFetch(`/api/admin/shared-folders/${sharedRecordForCurrent.id}`, { method: 'DELETE', toast: { success: { message: 'Partage retiré' } } });
+      if (!res.ok) throw new Error('unshare_failed');
+      await queryClient.invalidateQueries({ queryKey: ['shared-folders'] });
+    } catch {
+      // toast handled by apiFetch if any
     }
   };
 
@@ -723,6 +785,29 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
             </div>
             
             <div className="flex items-center gap-2">
+              {canShareHere && (
+                sharedRecordForCurrent ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    type="button"
+                    onClick={handleUnshare}
+                    title="Retirer du partage (ne supprime pas le dossier sur le disque)"
+                  >
+                    Retirer du partage
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => setIsShareFolderModalOpen(true)}
+                    title="Partager ce dossier (sans supprimer/créer sur le disque)"
+                  >
+                    Partager
+                  </Button>
+                )
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -768,6 +853,51 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
                     <span className="hidden md:inline">Sélectionner</span>
                   </>
                 )}
+
+      {/* Share folder modal */}
+      {canShareHere && (
+        <Dialog open={isShareFolderModalOpen} onOpenChange={setIsShareFolderModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Partager ce dossier</DialogTitle>
+              <DialogDescription>Définissez la visibilité de ce dossier partagé.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <div className="space-y-1">
+                <p className="text-xs font-medium">Visibilité</p>
+                <select
+                  className="border rounded-md px-3 py-2 text-xs w-full"
+                  value={shareVisibility}
+                  onChange={(e) => setShareVisibility(e.target.value as any)}
+                >
+                  <option value="enterprise">Toute l'entreprise</option>
+                  <option value="services">Services sélectionnés</option>
+                </select>
+              </div>
+              {shareVisibility === 'services' && (
+                <div className="border rounded-md p-3 space-y-2">
+                  <p className="text-xs font-medium">Services autorisés</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    {adminServices.map((s) => {
+                      const checked = shareServiceIds.includes(s.id);
+                      return (
+                        <label key={s.id} className="flex items-center gap-2 text-xs">
+                          <Checkbox checked={checked} onCheckedChange={(v: any) => toggleShareService(s.id, Boolean(v))} />
+                          <span>{s.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsShareFolderModalOpen(false)}>Annuler</Button>
+              <Button onClick={handleLinkShare}>Partager</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
               </Button>
             </div>
           </div>

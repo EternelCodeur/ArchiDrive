@@ -57,11 +57,11 @@ export const FolderItem = ({ folder, onClick, onRename, onDelete, selectionMode,
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onRename}>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onRename && onRename(); }}>
               <Pencil className="w-4 h-4 mr-2" />
               Renommer
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onDelete}>
+            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onDelete && onDelete(); }}>
               <Trash2 className="w-4 h-4 mr-2" />
               Supprimer
             </DropdownMenuItem>

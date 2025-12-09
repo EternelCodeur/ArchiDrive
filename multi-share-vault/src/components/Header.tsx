@@ -89,11 +89,13 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
                 <div>
                   <p className="font-medium">{user?.name}</p>
                   <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  <p className="text-md mt-2 text-black">{user?.service_name}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => {
+                onSelect={(e) => {
+                  e.preventDefault();
                   navigate("/profile");
                 }}
               >
@@ -104,7 +106,6 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
               <DropdownMenuItem
                 className="text-destructive"
                 onSelect={(e) => { e.preventDefault(); void handleLogout(); }}
-                onClick={() => { void handleLogout(); }}
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Déconnexion
