@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,27 @@ const AdminDashboard = () => {
 
   const queryClient = useQueryClient();
 
+  // Public folders (visible to all users) creation
+  const [publicFolderName, setPublicFolderName] = useState("");
+  const createPublicFolderMutation = useMutation({
+    mutationFn: async (payload: { name: string }) => {
+      const res = await apiFetch(`/api/public-folders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: payload.name }),
+        toast: { success: { message: "Dossier public créé" }, error: { enabled: true, message: "Échec de création" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur lors de la création du dossier public");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setPublicFolderName("");
+      // Optionally invalidate a future list if needed
+    },
+  });
+
   const { data: services = [] } = useQuery({
     queryKey: ["admin-services"],
     queryFn: async (): Promise<Service[]> => {
@@ -42,6 +63,22 @@ const AdminDashboard = () => {
     refetchOnWindowFocus: false,
     retry: 1,
     refetchInterval: user?.role === "admin" && !!user?.enterprise_id ? 10000 : false,
+  });
+
+  // Permissions Admin: load current permissions per employee
+  const { data: rawPermissions = [] } = useQuery({
+    queryKey: ["admin-permissions"],
+    enabled: user?.role === "admin" && !!user?.enterprise_id,
+    queryFn: async (): Promise<Array<{ employee_id: number; view_all_folders: boolean; delete_documents: boolean }>> => {
+      const res = await apiFetch(`/api/admin/permissions`, { toast: { error: { enabled: false } } });
+      if (!res.ok) {
+        throw new Error("Erreur lors du chargement des permissions");
+      }
+      return res.json();
+    },
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 
   const { data: employees = [] } = useQuery({
@@ -339,25 +376,60 @@ const AdminDashboard = () => {
     deleteEmployeeMutation.mutate(id);
   };
 
-  const [permissions, setPermissions] = useState<Record<number, Permission>>(() => {
+  const [permissions, setPermissions] = useState<Record<number, Permission>>({});
+
+  useEffect(() => {
     const initial: Record<number, Permission> = {};
     employees.forEach((u) => {
+      const p = (rawPermissions as Array<{ employee_id: number; view_all_folders: boolean; delete_documents: boolean }>)
+        .find((rp) => rp.employee_id === u.id);
       initial[u.id] = {
-        viewAllFolders: false,
-        deleteDocuments: false,
+        viewAllFolders: p?.view_all_folders ?? false,
+        deleteDocuments: p?.delete_documents ?? false,
       };
     });
-    return initial;
+    setPermissions(initial);
+  }, [employees, rawPermissions]);
+
+  const savePermissionMutation = useMutation({
+    mutationFn: async (payload: { employee_id: number; viewAllFolders: boolean; deleteDocuments: boolean }) => {
+      const res = await apiFetch(`/api/admin/permissions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_id: payload.employee_id,
+          view_all_folders: payload.viewAllFolders,
+          delete_documents: payload.deleteDocuments,
+        }),
+        toast: { success: { message: "Permissions mises à jour" }, error: { enabled: true, message: "Erreur lors de la mise à jour des permissions" } },
+      });
+      if (!res.ok) {
+        throw new Error("Erreur API permissions");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-permissions"] });
+    },
   });
 
   const togglePermission = (userId: number, key: keyof Permission, value: boolean) => {
-    setPermissions((prev) => ({
-      ...prev,
-      [userId]: {
-        ...prev[userId],
-        [key]: value,
-      },
-    }));
+    setPermissions((prev) => {
+      const current = prev[userId] || { viewAllFolders: false, deleteDocuments: false };
+      const next: Permission = { ...current, [key]: value } as Permission;
+
+      // Persist to backend
+      savePermissionMutation.mutate({
+        employee_id: userId,
+        viewAllFolders: key === "viewAllFolders" ? value : current.viewAllFolders,
+        deleteDocuments: key === "deleteDocuments" ? value : current.deleteDocuments,
+      });
+
+      return {
+        ...prev,
+        [userId]: next,
+      };
+    });
   };
 
   const renderContent = () => {
@@ -383,11 +455,39 @@ const AdminDashboard = () => {
     // Paramètres & permissions
     if (activeTab === "settings") {
       return (
-        <AdminSettingsPermissions
-          employees={employees}
-          permissions={permissions}
-          togglePermission={togglePermission}
-        />
+        <>
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle>Créer un dossier visible par tous</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Nom du dossier public"
+                  value={publicFolderName}
+                  onChange={(e) => setPublicFolderName(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const v = publicFolderName.trim();
+                    if (!v) return;
+                    createPublicFolderMutation.mutate({ name: v });
+                  }}
+                  disabled={!publicFolderName.trim() || createPublicFolderMutation.isPending}
+                >
+                  Créer
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <AdminSettingsPermissions
+            employees={employees}
+            permissions={permissions}
+            togglePermission={togglePermission}
+          />
+        </>
       );
     }
 

@@ -18,4 +18,9 @@ class Employee extends Model
         'service_id',
         'user_id',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

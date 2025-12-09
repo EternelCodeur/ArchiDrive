@@ -86,9 +86,15 @@ class FolderController extends Controller
                 return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
             }
             if ($user->role === 'agent') {
-                $emp = Employee::where('user_id', $user->id)->first();
-                if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                if ((bool)($user->can_view_all_services ?? false) === true) {
+                    if ((int)$service->enterprise_id !== (int)$user->enterprise_id) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
+                } else {
+                    $emp = Employee::where('user_id', $user->id)->first();
+                    if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
                 }
             }
             // Ensure a root folder exists (lazy create)
@@ -122,9 +128,16 @@ class FolderController extends Controller
                 }
             }
             if ($user->role === 'agent') {
-                $emp = Employee::where('user_id', $user->id)->first();
-                if (!$emp || (int)$emp->service_id !== (int)$parent->service_id) {
-                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                $svc = Service::find($parent->service_id);
+                if ((bool)($user->can_view_all_services ?? false) === true) {
+                    if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
+                } else {
+                    $emp = Employee::where('user_id', $user->id)->first();
+                    if (!$emp || (int)$emp->service_id !== (int)$parent->service_id) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
                 }
             }
             $children = Folder::where('parent_id', $parentId)->get();
@@ -146,9 +159,16 @@ class FolderController extends Controller
             }
         }
         if ($user->role === 'agent') {
-            $emp = Employee::where('user_id', $user->id)->first();
-            if (!$emp || (int)$emp->service_id !== (int)$folder->service_id) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            $svc = Service::find($folder->service_id);
+            if ((bool)($user->can_view_all_services ?? false) === true) {
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            } else {
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp || (int)$emp->service_id !== (int)$folder->service_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
             }
         }
         return response()->json($folder);
@@ -184,9 +204,16 @@ class FolderController extends Controller
             }
         }
         if ($user->role === 'agent') {
-            $emp = Employee::where('user_id', $user->id)->first();
-            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            $svc = Service::find($serviceId);
+            if ((bool)($user->can_view_all_services ?? false) === true) {
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            } else {
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
             }
         }
 

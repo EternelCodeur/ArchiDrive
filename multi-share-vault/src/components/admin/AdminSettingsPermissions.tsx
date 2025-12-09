@@ -39,7 +39,6 @@ export const AdminSettingsPermissions = ({
               <div className="grid grid-cols-3 bg-muted text-xs font-medium px-3 py-2">
                 <span>Agent</span>
                 <span>Voir tous les dossiers</span>
-                <span>Supprimer les documents</span>
               </div>
               {employees.map((u) => {
                 const p =
@@ -51,7 +50,7 @@ export const AdminSettingsPermissions = ({
                 return (
                   <div
                     key={u.id}
-                    className="grid grid-cols-3 items-center text-xs px-3 py-2 border-t"
+                    className="grid grid-cols-2 items-center text-xs px-3 py-2 border-t"
                   >
                     <div>
                       <p className="font-medium text-foreground text-xs">
@@ -64,15 +63,6 @@ export const AdminSettingsPermissions = ({
                         checked={p.viewAllFolders}
                         onCheckedChange={(val: any) =>
                           togglePermission(u.id, "viewAllFolders", Boolean(val))
-                        }
-                      />
-                      <span>Autoriser</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={p.deleteDocuments}
-                        onCheckedChange={(val: any) =>
-                          togglePermission(u.id, "deleteDocuments", Boolean(val))
                         }
                       />
                       <span>Autoriser</span>

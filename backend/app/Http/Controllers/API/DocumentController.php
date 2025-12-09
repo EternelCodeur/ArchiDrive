@@ -85,9 +85,16 @@ class DocumentController extends Controller
                 }
             }
             if ($user->role === 'agent') {
-                $emp = Employee::where('user_id', $user->id)->first();
-                if (!$emp || (int)$emp->service_id !== (int)$ctxServiceId) {
-                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                $svc = Service::find($ctxServiceId);
+                if ((bool)($user->can_view_all_services ?? false) === true) {
+                    if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
+                } else {
+                    $emp = Employee::where('user_id', $user->id)->first();
+                    if (!$emp || (int)$emp->service_id !== (int)$ctxServiceId) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
                 }
             }
         }
@@ -131,9 +138,18 @@ class DocumentController extends Controller
             }
         }
         if ($user->role === 'agent') {
-            $emp = Employee::where('user_id', $user->id)->first();
-            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            // If the agent has global view permission, allow create in any service of their enterprise
+            $svc = $service;
+            if ((bool)($user->can_view_all_services ?? false) === true) {
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            } else {
+                // Otherwise, restrict to their assigned service
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
             }
         }
 
@@ -180,9 +196,16 @@ class DocumentController extends Controller
             }
         }
         if ($user->role === 'agent') {
-            $emp = Employee::where('user_id', $user->id)->first();
-            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            $svc = Service::find($serviceId);
+            if ((bool)($user->can_view_all_services ?? false) === true) {
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            } else {
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
             }
         }
         return response()->json($document);

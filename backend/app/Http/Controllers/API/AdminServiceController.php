@@ -35,6 +35,11 @@ class AdminServiceController extends Controller
         }
 
         if ($user->role === 'agent') {
+            // Special right: view all services within the same enterprise
+            if (!empty($user->enterprise_id) && (bool)($user->can_view_all_services ?? false) === true) {
+                $services = Service::where('enterprise_id', $user->enterprise_id)->get();
+                return response()->json($services);
+            }
             $emp = Employee::where('user_id', $user->id)->first();
             if ($emp && $emp->service_id) {
                 $svc = Service::where('id', $emp->service_id)->first();

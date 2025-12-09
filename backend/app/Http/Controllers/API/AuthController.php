@@ -139,15 +139,29 @@ class AuthController extends Controller
             $enterpriseName = $enterprise?->name;
         }
 
+        // Resolve agent service info via Employee
+        $serviceId = null;
+        $serviceName = null;
+        try {
+            $employee = \App\Models\Employee::where('user_id', $user->id)->first();
+            if ($employee && $employee->service_id) {
+                $serviceId = (int) $employee->service_id;
+                $svc = \App\Models\Service::find($serviceId);
+                $serviceName = $svc?->name;
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role,
-            'service_id' => null,
+            'service_id' => $serviceId,
             'enterprise_id' => $user->enterprise_id,
             'enterprise_name' => $enterpriseName,
+            'service_name' => $serviceName,
             'avatar' => null,
+            'can_view_all_services' => (bool) ($user->can_view_all_services ?? false),
         ];
     }
 }

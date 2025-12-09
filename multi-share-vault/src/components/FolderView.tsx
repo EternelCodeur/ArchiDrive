@@ -322,74 +322,67 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     const name = newFolderName.trim();
     if (!name) return;
 
-    // Determine parent and service linkage
-    let parentId = folderId ?? null;
+    // Determine target parent DB folder and service for creation
+    let parentId: number | null = null;
     let serviceId: number | null = null;
-    if (parentId !== null) {
-      const parent = getFolderById(parentId);
-      serviceId = parent?.service_id ?? null;
-    } else {
-      // Fallbacks for root creation
-      // 1) user's service
-      serviceId = user?.service_id ?? null;
-      // 2) visible services (single)
-      if (!serviceId && (visibleServices?.length === 1)) {
+
+    // If a folder is selected, prefer creating inside it
+    if (folderId !== null) {
+      // Use resolved DB folder id when available
+      if (typeof selectedDbFolderId === "number") {
+        parentId = selectedDbFolderId;
+      } else if (effectiveSelected && typeof effectiveSelected.id === "number") {
+        // When selection already points to a DB folder
+        parentId = effectiveSelected.id as number;
+      }
+      // Derive service from effective selection if possible
+      serviceId = (effectiveSelected?.service_id as number | null) ?? null;
+
+      // If selection is a mock root, map to DB root
+      if (parentId !== null) {
+        const parent = getFolderById(parentId);
+        if (parent && parent.parent_id === null && !isRuntimeFolder(parentId) && parent.service_id) {
+          const originalMockParentId = parentId;
+          try {
+            const resRoot = await apiFetch(`/api/folders?service_id=${parent.service_id}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
+            if (resRoot.ok) {
+              const roots: Array<{ id: number }> = await resRoot.json();
+              const dbRoot = Array.isArray(roots) ? roots.find((r) => typeof r.id === "number") : null;
+              if (dbRoot) parentId = dbRoot.id;
+            }
+          } catch { /* ignore */ }
+          if (parentId === originalMockParentId) {
+            parentId = null;
+          }
+        }
+      }
+    }
+
+    // If no folder is selected (root level), pick a service and target its DB root
+    if (folderId === null && parentId === null) {
+      // 1) user's service if any
+      serviceId = user?.service_id ?? serviceId;
+      // 2) any visible service (pick first)
+      if (!serviceId && Array.isArray(visibleServices) && visibleServices.length > 0) {
         serviceId = visibleServices[0].id;
       }
-      // If we resolved a service, create inside its DB root folder
+      // Resolve DB root for that service as parent
       if (serviceId) {
         try {
           const resRoots = await apiFetch(`/api/folders?service_id=${serviceId}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
           if (resRoots.ok) {
             const roots: Array<{ id: number }> = await resRoots.json();
             const root = Array.isArray(roots) ? roots[0] : null;
-            if (root && typeof root.id === 'number') parentId = root.id;
+            if (root && typeof root.id === "number") parentId = root.id;
           }
-        } catch { void 0 }
+        } catch { /* ignore */ }
       }
     }
 
-    // If serviceId is still not resolved, try fetching visible services on-demand
-    if (!serviceId) {
-      try {
-        const res = await apiFetch('/api/services/visible', { toast: { error: { enabled: false }, success: { enabled: false } } });
-        if (res.ok) {
-          const list: Service[] = await res.json();
-          if (Array.isArray(list) && list.length === 1) {
-            serviceId = list[0].id;
-            const rootFolders = getFoldersByParent(null);
-            const serviceRoot = rootFolders.find((f) => f.service_id === serviceId) ?? null;
-            if (serviceRoot) {
-              parentId = serviceRoot.id;
-            }
-          }
-        }
-      } catch { void 0 }
-    }
-
-    if (!serviceId) {
+    // If still nothing resolvable, abort gracefully
+    if (parentId === null && !serviceId) {
       toast.error("Création impossible: votre compte n'est pas assigné à un service. Contactez l'administrateur.");
       return;
-    }
-
-    // If parentId points to a mock root (not a DB folder), resolve the corresponding DB root folder id
-    if (parentId !== null) {
-      const parent = getFolderById(parentId);
-      if (parent && parent.parent_id === null && !isRuntimeFolder(parentId) && parent.service_id) {
-        const originalMockParentId = parentId;
-        try {
-          const resRoot = await apiFetch(`/api/folders?service_id=${parent.service_id}`, { toast: { error: { enabled: false }, success: { enabled: false } } });
-          if (resRoot.ok) {
-            const roots: Array<{ id: number } & Record<string, unknown>> = await resRoot.json();
-            const dbRoot = Array.isArray(roots) ? roots.find((r) => typeof r.id === 'number') : null;
-            if (dbRoot) parentId = dbRoot.id;
-          }
-        } catch { void 0 }
-        // If mapping failed, fallback to root creation
-        if (parentId === originalMockParentId) {
-          parentId = null;
-        }
-      }
     }
 
     // Persist to backend

@@ -23,6 +23,7 @@ class User extends Authenticatable
         'password',
         'role',
         'enterprise_id',
+        'can_view_all_services',
     ];
 
     /**
@@ -45,6 +46,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'can_view_all_services' => 'boolean',
         ];
     }
 }

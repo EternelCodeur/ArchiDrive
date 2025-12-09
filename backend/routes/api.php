@@ -10,6 +10,8 @@ use App\Http\Controllers\API\StatsController;
 use App\Http\Controllers\API\EventsController;
 use App\Http\Controllers\API\AdminServiceController;
 use App\Http\Controllers\API\AdminEmployeeController;
+use App\Http\Controllers\API\AdminPermissionController;
+use App\Http\Controllers\API\PublicFolderController;
 use App\Http\Controllers\API\FolderController;
 
 Route::get('/health', function () {
@@ -23,6 +25,13 @@ Route::middleware('jwt')->group(function () {
 
     // Visible services for the authenticated user (agent/admin/super_admin)
     Route::get('/services/visible', [AdminServiceController::class, 'visible']);
+
+    // Admin permissions (allow both admin and super_admin; controller enforces role check)
+    Route::get('/admin/permissions', [AdminPermissionController::class, 'index']);
+    Route::post('/admin/permissions', [AdminPermissionController::class, 'store']);
+
+    // Public folders creation (placeholder)
+    Route::post('/public-folders', [PublicFolderController::class, 'store']);
 
     // Folders CRUD (index/show/store/update/destroy)
     Route::apiResource('folders', FolderController::class)->only(['index', 'show', 'store', 'update', 'destroy']);

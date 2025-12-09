@@ -25,6 +25,7 @@ export interface User {
   enterprise_name?: string | null;
   service_name?: string | null;
   avatar?: string;
+  can_view_all_services?: boolean;
 }
 
 export interface Folder {
