@@ -15,5 +15,7 @@ class Enterprise extends Model
         'email',
         'storage',
         'folder_path',
+        'ui_theme',
+        'ui_accent_color',
     ];
 }

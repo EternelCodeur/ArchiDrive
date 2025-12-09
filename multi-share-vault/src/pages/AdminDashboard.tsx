@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { mockDocuments } from "@/data/mockData";
 import type { Service } from "@/types";
 import type { AdminEmployee } from "@/types/admin";
@@ -28,27 +27,6 @@ const AdminDashboard = () => {
   const currentEnterpriseName = user?.role !== "super_admin" ? (user?.enterprise_name ?? null) : null;
 
   const queryClient = useQueryClient();
-
-  // Public folders (visible to all users) creation
-  const [publicFolderName, setPublicFolderName] = useState("");
-  const createPublicFolderMutation = useMutation({
-    mutationFn: async (payload: { name: string }) => {
-      const res = await apiFetch(`/api/public-folders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: payload.name }),
-        toast: { success: { message: "Dossier public créé" }, error: { enabled: true, message: "Échec de création" } },
-      });
-      if (!res.ok) {
-        throw new Error("Erreur lors de la création du dossier public");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      setPublicFolderName("");
-      // Optionally invalidate a future list if needed
-    },
-  });
 
   const { data: services = [] } = useQuery({
     queryKey: ["admin-services"],
@@ -456,32 +434,6 @@ const AdminDashboard = () => {
     if (activeTab === "settings") {
       return (
         <>
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle>Créer un dossier visible par tous</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Nom du dossier public"
-                  value={publicFolderName}
-                  onChange={(e) => setPublicFolderName(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  onClick={() => {
-                    const v = publicFolderName.trim();
-                    if (!v) return;
-                    createPublicFolderMutation.mutate({ name: v });
-                  }}
-                  disabled={!publicFolderName.trim() || createPublicFolderMutation.isPending}
-                >
-                  Créer
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
           <AdminSettingsPermissions
             employees={employees}
             permissions={permissions}

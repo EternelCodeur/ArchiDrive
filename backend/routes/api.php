@@ -13,6 +13,7 @@ use App\Http\Controllers\API\AdminEmployeeController;
 use App\Http\Controllers\API\AdminPermissionController;
 use App\Http\Controllers\API\PublicFolderController;
 use App\Http\Controllers\API\FolderController;
+use App\Http\Controllers\API\UiPreferencesController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'OK']);
@@ -22,6 +23,10 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 Route::middleware('jwt')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+    // Enterprise UI preferences (theme & accent)
+    Route::get('/ui-preferences', [UiPreferencesController::class, 'show']);
+    Route::post('/admin/ui-preferences', [UiPreferencesController::class, 'store']);
 
     // Visible services for the authenticated user (agent/admin/super_admin)
     Route::get('/services/visible', [AdminServiceController::class, 'visible']);

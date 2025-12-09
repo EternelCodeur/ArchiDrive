@@ -45,6 +45,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try { sessionStorage.setItem('auth:user', JSON.stringify(nextUser)); } catch { void 0 }
       // Clear all cached queries to avoid showing previous user's data
       try { queryClient.clear(); } catch { void 0 }
+      // Load and apply enterprise UI preferences (theme & accent)
+      try {
+        const prefRes = await apiFetch('/api/ui-preferences', { toast: { error: { enabled: false } } });
+        if (prefRes.ok) {
+          const prefs = await prefRes.json() as { ui_theme?: 'light'|'dark'|'system'; ui_accent_color?: 'blue'|'green'|'purple' };
+          if (prefs.ui_theme) applyTheme(prefs.ui_theme);
+          if (prefs.ui_accent_color) applyAccent(prefs.ui_accent_color);
+        }
+      } catch { /* ignore */ }
       return nextUser;
     }
     return null;
@@ -70,6 +79,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const me = (await res.json()) as User;
           setUser(me);
           try { sessionStorage.setItem('auth:user', JSON.stringify(me)); } catch { void 0 }
+          // Load and apply enterprise UI preferences (theme & accent)
+          try {
+            const prefRes = await apiFetch('/api/ui-preferences', { toast: { error: { enabled: false } } });
+            if (prefRes.ok) {
+              const prefs = await prefRes.json() as { ui_theme?: 'light'|'dark'|'system'; ui_accent_color?: 'blue'|'green'|'purple' };
+              if (prefs.ui_theme) applyTheme(prefs.ui_theme);
+              if (prefs.ui_accent_color) applyAccent(prefs.ui_accent_color);
+            }
+          } catch { /* ignore */ }
         } else if (res.status === 401) {
           setUser(null);
           try { sessionStorage.removeItem('auth:user'); } catch { void 0 }
@@ -122,3 +140,63 @@ export const useAuth = () => {
   }
   return context;
 };
+
+function applyTheme(mode: 'light' | 'dark' | 'system') {
+  const root = document.documentElement;
+  const mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+  const isDark = mode === 'system' ? (mql ? mql.matches : false) : (mode === 'dark');
+  if (isDark) {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+}
+
+function applyAccent(color: 'blue' | 'green' | 'purple') {
+  const root = document.documentElement;
+  const sets: Record<string, Record<string, string>> = {
+    blue: {
+      '--primary': '217 91% 60%',
+      '--primary-foreground': '0 0% 100%',
+      '--accent': '217 91% 95%',
+      '--accent-foreground': '217 91% 35%',
+      '--ring': '217 91% 60%',
+      '--sidebar-primary': '217 91% 60%',
+      '--sidebar-primary-foreground': '0 0% 100%',
+      '--sidebar-accent': '217 91% 95%',
+      '--sidebar-accent-foreground': '217 91% 35%',
+      '--tab-active': '217 91% 60%',
+      '--folder-hover': '217 91% 97%'
+    },
+    green: {
+      '--primary': '142 70% 45%',
+      '--primary-foreground': '0 0% 100%',
+      '--accent': '142 60% 92%',
+      '--accent-foreground': '142 70% 30%',
+      '--ring': '142 70% 45%',
+      '--sidebar-primary': '142 70% 45%',
+      '--sidebar-primary-foreground': '0 0% 100%',
+      '--sidebar-accent': '142 60% 20%',
+      '--sidebar-accent-foreground': '142 70% 70%',
+      '--tab-active': '142 70% 45%',
+      '--folder-hover': '142 60% 96%'
+    },
+    purple: {
+      '--primary': '262 83% 58%',
+      '--primary-foreground': '0 0% 100%',
+      '--accent': '262 70% 94%',
+      '--accent-foreground': '262 70% 40%',
+      '--ring': '262 83% 58%',
+      '--sidebar-primary': '262 83% 58%',
+      '--sidebar-primary-foreground': '0 0% 100%',
+      '--sidebar-accent': '262 40% 22%',
+      '--sidebar-accent-foreground': '262 83% 70%',
+      '--tab-active': '262 83% 58%',
+      '--folder-hover': '262 70% 96%'
+    }
+  };
+  const set = sets[color];
+  Object.entries(set).forEach(([k, v]) => {
+    root.style.setProperty(k, v);
+  });
+}
