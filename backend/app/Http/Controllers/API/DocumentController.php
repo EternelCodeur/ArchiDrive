@@ -8,6 +8,7 @@ use App\Models\Folder;
 use App\Models\Service;
 use App\Models\Enterprise;
 use App\Models\Employee;
+use App\Models\SharedFolder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -59,6 +60,49 @@ class DocumentController extends Controller
         return implode('/', $segments);
     }
 
+    /**
+     * Determine if a folder (or any of its ancestors) is a shared folder visible to the current user.
+     */
+    private function isFolderInVisibleSharedTree($user, int $folderId): bool
+    {
+        if (!$user || !$user->enterprise_id) return false;
+        // Build ancestor chain including the folder itself
+        $ids = [];
+        $cur = Folder::find($folderId);
+        $guard = 0;
+        while ($cur && $guard < 200) {
+            $ids[] = (int)$cur->id;
+            if ($cur->parent_id === null) break;
+            $cur = Folder::find($cur->parent_id);
+            $guard++;
+        }
+
+        if (empty($ids)) return false;
+        $shared = SharedFolder::where('enterprise_id', $user->enterprise_id)
+            ->whereIn('folder_id', $ids)
+            ->get();
+        if ($shared->isEmpty()) return false;
+
+        // If enterprise-wide visibility, allow
+        if ($shared->firstWhere('visibility', 'enterprise')) return true;
+
+        // If services visibility, allow only if user's service is included
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp) return false;
+            foreach ($shared as $sf) {
+                if ($sf->visibility === 'services') {
+                    try {
+                        if ($sf->services()->where('services.id', $emp->service_id)->exists()) {
+                            return true;
+                        }
+                    } catch (\Throwable $e) { /* ignore */ }
+                }
+            }
+        }
+        return false;
+    }
+
     public function index(Request $request)
     {
         $user = Auth::user();
@@ -93,7 +137,12 @@ class DocumentController extends Controller
                 } else {
                     $emp = Employee::where('user_id', $user->id)->first();
                     if (!$emp || (int)$emp->service_id !== (int)$ctxServiceId) {
-                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                        // Allow if listing within a folder that is inside a visible shared folder tree
+                        if ($folderId && $this->isFolderInVisibleSharedTree($user, (int)$folderId)) {
+                            // allowed via shared folder rule
+                        } else {
+                            return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                        }
                     }
                 }
             }
@@ -148,7 +197,12 @@ class DocumentController extends Controller
                 // Otherwise, restrict to their assigned service
                 $emp = Employee::where('user_id', $user->id)->first();
                 if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    // Allow uploads inside a folder that is within a visible shared folder tree
+                    if ($folderId && $this->isFolderInVisibleSharedTree($user, (int)$folderId)) {
+                        // allowed via shared folder rule
+                    } else {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
                 }
             }
         }
@@ -204,7 +258,12 @@ class DocumentController extends Controller
             } else {
                 $emp = Employee::where('user_id', $user->id)->first();
                 if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    // Allow if the document belongs to a folder inside a visible shared folder tree
+                    if ($document->folder_id && $this->isFolderInVisibleSharedTree($user, (int)$document->folder_id)) {
+                        // allowed via shared folder rule
+                    } else {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
                 }
             }
         }
@@ -232,7 +291,12 @@ class DocumentController extends Controller
         if ($user->role === 'agent') {
             $emp = Employee::where('user_id', $user->id)->first();
             if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                // Allow if the document belongs to a folder inside a visible shared folder tree
+                if ($document->folder_id && $this->isFolderInVisibleSharedTree($user, (int)$document->folder_id)) {
+                    // allowed via shared folder rule
+                } else {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
             }
         }
 
@@ -296,7 +360,12 @@ class DocumentController extends Controller
         if ($user->role === 'agent') {
             $emp = Employee::where('user_id', $user->id)->first();
             if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                // Allow deletion if the document belongs to a folder inside a visible shared folder tree
+                if ($document->folder_id && $this->isFolderInVisibleSharedTree($user, (int)$document->folder_id)) {
+                    // allowed via shared folder rule
+                } else {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
             }
         }
 

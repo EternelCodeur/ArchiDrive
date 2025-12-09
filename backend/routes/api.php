@@ -14,6 +14,7 @@ use App\Http\Controllers\API\AdminPermissionController;
 use App\Http\Controllers\API\PublicFolderController;
 use App\Http\Controllers\API\FolderController;
 use App\Http\Controllers\API\UiPreferencesController;
+use App\Http\Controllers\API\SharedFolderController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'OK']);
@@ -27,6 +28,9 @@ Route::middleware('jwt')->group(function () {
     // Enterprise UI preferences (theme & accent)
     Route::get('/ui-preferences', [UiPreferencesController::class, 'show']);
     Route::post('/admin/ui-preferences', [UiPreferencesController::class, 'store']);
+
+    // Shared folders
+    Route::get('/shared-folders/visible', [SharedFolderController::class, 'visible']);
 
     // Visible services for the authenticated user (agent/admin/super_admin)
     Route::get('/services/visible', [AdminServiceController::class, 'visible']);
@@ -73,6 +77,12 @@ Route::middleware('jwt')->group(function () {
 
         // Employees CRUD
         Route::apiResource('/admin/employees', AdminEmployeeController::class);
+
+        // Shared folders management (admin)
+        Route::post('/admin/shared-folders', [SharedFolderController::class, 'store']);
+        Route::post('/admin/shared-folders/link', [SharedFolderController::class, 'link']);
+        Route::patch('/admin/shared-folders/{sharedFolder}', [SharedFolderController::class, 'update']);
+        Route::delete('/admin/shared-folders/{sharedFolder}', [SharedFolderController::class, 'destroy']);
 
         // SSE endpoints for services and employees updates
         Route::get('/events/services', [EventsController::class, 'services']);

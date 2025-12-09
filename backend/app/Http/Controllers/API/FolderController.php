@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\Service;
 use App\Models\Enterprise;
 use App\Models\Employee;
+use App\Models\SharedFolder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -68,6 +69,49 @@ class FolderController extends Controller
             $path .= DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, $pathSegments);
         }
         return $path;
+    }
+
+    /**
+     * Determine if a folder (or any of its ancestors) is a shared folder visible to the current user.
+     */
+    private function isFolderInVisibleSharedTree($user, int $folderId): bool
+    {
+        if (!$user || !$user->enterprise_id) return false;
+        // Build ancestor chain including the folder itself
+        $ids = [];
+        $cur = Folder::find($folderId);
+        $guard = 0;
+        while ($cur && $guard < 200) {
+            $ids[] = (int)$cur->id;
+            if ($cur->parent_id === null) break;
+            $cur = Folder::find($cur->parent_id);
+            $guard++;
+        }
+
+        if (empty($ids)) return false;
+        $shared = SharedFolder::where('enterprise_id', $user->enterprise_id)
+            ->whereIn('folder_id', $ids)
+            ->get();
+        if ($shared->isEmpty()) return false;
+
+        // If enterprise-wide visibility, allow
+        if ($shared->firstWhere('visibility', 'enterprise')) return true;
+
+        // If services visibility, allow only if user's service is included
+        if ($user->role === 'agent') {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp) return false;
+            foreach ($shared as $sf) {
+                if ($sf->visibility === 'services') {
+                    try {
+                        if ($sf->services()->where('services.id', $emp->service_id)->exists()) {
+                            return true;
+                        }
+                    } catch (\Throwable $e) { /* ignore */ }
+                }
+            }
+        }
+        return false;
     }
 
     public function index(Request $request)
@@ -136,7 +180,10 @@ class FolderController extends Controller
                 } else {
                     $emp = Employee::where('user_id', $user->id)->first();
                     if (!$emp || (int)$emp->service_id !== (int)$parent->service_id) {
-                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                        // Allow if folder is within a shared folder tree visible to this agent
+                        if (!$this->isFolderInVisibleSharedTree($user, (int)$parentId)) {
+                            return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                        }
                     }
                 }
             }
@@ -167,7 +214,10 @@ class FolderController extends Controller
             } else {
                 $emp = Employee::where('user_id', $user->id)->first();
                 if (!$emp || (int)$emp->service_id !== (int)$folder->service_id) {
-                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    // Allow if folder is within a shared folder tree visible to this agent
+                    if (!$this->isFolderInVisibleSharedTree($user, (int)$folder->id)) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
                 }
             }
         }
@@ -212,7 +262,12 @@ class FolderController extends Controller
             } else {
                 $emp = Employee::where('user_id', $user->id)->first();
                 if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    // If creating under a parent folder that is inside a visible shared folder tree, allow
+                    if ($parentId && $this->isFolderInVisibleSharedTree($user, (int)$parentId)) {
+                        // allowed via shared folder visibility
+                    } else {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
                 }
             }
         }
@@ -256,7 +311,10 @@ class FolderController extends Controller
         if ($user->role === 'agent') {
             $emp = Employee::where('user_id', $user->id)->first();
             if (!$emp || (int)$emp->service_id !== (int)$folder->service_id) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                // Allow rename if folder is inside a visible shared folder tree for this agent
+                if (!$this->isFolderInVisibleSharedTree($user, (int)$folder->id)) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
             }
         }
 
@@ -294,8 +352,25 @@ class FolderController extends Controller
             }
         }
         if ($user->role === 'agent') {
-            $emp = Employee::where('user_id', $user->id)->first();
-            if (!$emp || (int)$emp->service_id !== (int)$folder->service_id) {
+            $svc = Service::find($folder->service_id);
+            if ((bool)($user->can_view_all_services ?? false) === true) {
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            } else {
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp || (int)$emp->service_id !== (int)$folder->service_id) {
+                    // Allow deletion if folder is inside a visible shared folder tree for this agent
+                    if (!$this->isFolderInVisibleSharedTree($user, (int)$folder->id)) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
+                }
+            }
+            // Block deletion of the shared root folder for agents
+            $isSharedRoot = SharedFolder::where('enterprise_id', $user->enterprise_id)
+                ->where('folder_id', $folder->id)
+                ->exists();
+            if ($isSharedRoot) {
                 return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
             }
         }
