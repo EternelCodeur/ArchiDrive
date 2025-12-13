@@ -1,8 +1,10 @@
 # src/App.tsx
 
-## Rôle
 
-À compléter.
+
+## Comportement
+
+Gère les routes de l'application et l'authentification avec protection des routes. Utilise React Router pour gérer les routes publiques et privées, et le contexte d'authentification pour contrôler l'accès.
 
 ## Dépendances
 

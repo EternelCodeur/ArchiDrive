@@ -2,7 +2,7 @@
 
 ## Rôle
 
-À compléter.
+Page d'accueil principale de l'application.
 
 ## Dépendances
 
@@ -27,8 +27,8 @@ Aucun
 
 ## Comportement
 
-À compléter.
+Affiche l'interface principale de l'application avec l'arborescence des dossiers, les onglets et la barre latérale.
 
 ## Points d’attention
 
-À compléter.
+Gère l'état des dossiers sélectionnés et les interactions avec l'arborescence.

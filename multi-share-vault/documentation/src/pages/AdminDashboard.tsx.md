@@ -1,15 +1,5 @@
 # src/pages/AdminDashboard.tsx
 
-## Rôle
-
-À compléter.
-
-## Dépendances
-
-### Internes
-
-Aucun
-
 ### Externes
 
 - `@/components/Header`
@@ -31,9 +21,4 @@ Aucun
 - `sonner`
 
 ## Comportement
-
-À compléter.
-
-## Points d’attention
-
-À compléter.
+    Affiche le tableau de bord administratif avec les différentes sections (employés, services, dossiers partagés, paramètres).
