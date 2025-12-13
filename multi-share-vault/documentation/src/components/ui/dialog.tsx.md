@@ -1,0 +1,26 @@
+# src/components/ui/dialog.tsx
+
+## Rôle
+
+À compléter.
+
+## Dépendances
+
+### Internes
+
+Aucun
+
+### Externes
+
+- `@/lib/utils`
+- `@radix-ui/react-dialog`
+- `lucide-react`
+- `react`
+
+## Comportement
+
+À compléter.
+
+## Points d’attention
+
+À compléter.

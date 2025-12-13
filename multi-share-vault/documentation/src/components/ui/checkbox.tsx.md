@@ -1,0 +1,26 @@
+# src/components/ui/checkbox.tsx
+
+## Rôle
+
+À compléter.
+
+## Dépendances
+
+### Internes
+
+Aucun
+
+### Externes
+
+- `@/lib/utils`
+- `@radix-ui/react-checkbox`
+- `lucide-react`
+- `react`
+
+## Comportement
+
+À compléter.
+
+## Points d’attention
+
+À compléter.
