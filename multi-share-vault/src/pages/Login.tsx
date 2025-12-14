@@ -19,22 +19,24 @@ const Login = () => {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
 
+  const brandName = ((import.meta as any)?.env?.VITE_APP_NAME as string | undefined) || "ArchiDrive";
+
   const slides = useMemo(
     () => [
       {
-        title: "Centralisez vos documents",
-        description: "Un espace sécurisé pour organiser, retrouver et partager vos fichiers par service.",
+        title: `Centralisez vos documents sur ${brandName}`,
+        description: `Un espace sécurisé pour organiser, retrouver et partager les fichiers de ${brandName} par service.`,
       },
       {
         title: "Partage maîtrisé",
-        description: "Contrôlez précisément l'accès aux dossiers partagés au sein de l'entreprise.",
+        description: `Contrôlez précisément l'accès aux dossiers partagés au sein de ${brandName}.`,
       },
       {
         title: "Vue admin claire",
-        description: "Gérez vos services, vos employés et vos permissions depuis un tableau de bord.",
+        description: `Gérez les services, les employés et les permissions de ${brandName} depuis un tableau de bord.`,
       },
     ],
-    []
+    [brandName]
   );
 
   const [activeSlide, setActiveSlide] = useState(0);
@@ -97,8 +99,8 @@ const Login = () => {
           </button>
 
           <div className="mx-auto w-full max-w-md text-center space-y-4">
-            <div className="mx-auto h-12 w-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center overflow-hidden">
-              <img src="logo-archi.png" alt="ArchiDrive" className="w-7 h-7 object-contain" />
+            <div className="mx-auto h-24 w-24 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center overflow-hidden">
+              <img src="logo-archi.png" alt="ArchiDrive" className="w-24 h-24 object-contain" />
             </div>
             <div className="space-y-2">
               <p className="text-base font-semibold text-slate-900">{slides[activeSlide].title}</p>
@@ -176,7 +178,7 @@ const Login = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Checkbox id="remember" checked={remember} onCheckedChange={(v:any) => setRemember(Boolean(v))} />
-                      <Label htmlFor="remember" className="text-sm text-muted-foreground">Se souvenir de moi</Label>
+                      <Label htmlFor="remember" className="text-sm text-muted-foreground">Rester connecté 2 semaines</Label>
                     </div>
                   </div>
 

@@ -34,7 +34,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Identifiants invalides'], Response::HTTP_UNAUTHORIZED);
         }
 
-        $ttlSeconds = $remember ? 60 * 60 * 24 * 7 : 60 * 60 * 2; // 7j vs 2h
+        $ttlSeconds = $remember ? 60 * 60 * 24 * 14 : 60 * 60 * 2; // 14j vs 2h
         $now = time();
         $payload = [
             'iss' => config('app.url'),
