@@ -134,9 +134,15 @@ class AuthController extends Controller
     private function formatUser(User $user): array
     {
         $enterpriseName = null;
+        $enterpriseStorage = null;
+        $enterpriseEmail = null;
+        $enterpriseAdminName = null;
         if ($user->enterprise_id) {
             $enterprise = Enterprise::find($user->enterprise_id);
             $enterpriseName = $enterprise?->name;
+            $enterpriseStorage = $enterprise?->storage;
+            $enterpriseEmail = $enterprise?->email;
+            $enterpriseAdminName = $enterprise?->admin_name;
         }
 
         // Resolve agent service info via Employee
@@ -159,6 +165,9 @@ class AuthController extends Controller
             'service_id' => $serviceId,
             'enterprise_id' => $user->enterprise_id,
             'enterprise_name' => $enterpriseName,
+            'enterprise_storage' => $enterpriseStorage,
+            'enterprise_email' => $enterpriseEmail,
+            'enterprise_admin_name' => $enterpriseAdminName,
             'service_name' => $serviceName,
             'avatar' => null,
             'can_view_all_services' => (bool) ($user->can_view_all_services ?? false),

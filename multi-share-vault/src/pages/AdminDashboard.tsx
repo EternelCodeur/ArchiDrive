@@ -44,6 +44,22 @@ const AdminDashboard = () => {
     refetchInterval: user?.role === "admin" && !!user?.enterprise_id ? 10000 : false,
   });
 
+  const { data: documentsCount = 0 } = useQuery({
+    queryKey: ["documents-count", user?.enterprise_id],
+    enabled: !!user,
+    queryFn: async (): Promise<number> => {
+      const res = await apiFetch(`/api/documents?count_only=1`, { toast: { error: { enabled: false } } });
+      if (!res.ok) {
+        return 0;
+      }
+      const data = await res.json() as { count?: number };
+      return typeof data.count === "number" ? data.count : 0;
+    },
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
   // Permissions Admin: load current permissions per employee
   const { data: rawPermissions = [] } = useQuery({
     queryKey: ["admin-permissions"],
@@ -414,10 +430,10 @@ const AdminDashboard = () => {
   const renderContent = () => {
     // Dashboard
     if (activeTab === "dashboard") {
-      const totalDocuments = mockDocuments.length;
+      const totalDocuments = documentsCount;
       const totalEmployees = employees.length;
       const totalServices = services.length;
-      const totalStorage = 1000; // valeur simulée
+      const totalStorage = user?.enterprise_storage ?? 0;
       const weeklyActivity = [12, 5, 18, 9, 14, 7, 11];
 
       return (
@@ -427,6 +443,8 @@ const AdminDashboard = () => {
           totalServices={totalServices}
           totalStorage={totalStorage}
           weeklyActivity={weeklyActivity}
+          enterpriseName={user?.enterprise_name ?? null}
+          enterpriseId={user?.enterprise_id ?? null}
         />
       );
     }
@@ -519,7 +537,17 @@ const AdminDashboard = () => {
         />
       );
     }
-    return <AdminDashboardOverview totalDocuments={mockDocuments.length} totalEmployees={employees.length} totalServices={services.length} totalStorage={1000} weeklyActivity={[12,5,18,9,14,7,11]} />;
+    return (
+      <AdminDashboardOverview
+        totalDocuments={documentsCount}
+        totalEmployees={employees.length}
+        totalServices={services.length}
+        totalStorage={user?.enterprise_storage ?? 0}
+        weeklyActivity={[12, 5, 18, 9, 14, 7, 11]}
+        enterpriseName={user?.enterprise_name ?? null}
+        enterpriseId={user?.enterprise_id ?? null}
+      />
+    );
   };
 
   return (

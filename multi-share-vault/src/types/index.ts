@@ -23,6 +23,9 @@ export interface User {
   service_id: number | null;
   enterprise_id: number;
   enterprise_name?: string | null;
+  enterprise_storage?: number | null;
+  enterprise_email?: string | null;
+  enterprise_admin_name?: string | null;
   service_name?: string | null;
   avatar?: string;
   can_view_all_services?: boolean;

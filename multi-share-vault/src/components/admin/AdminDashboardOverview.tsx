@@ -10,6 +10,8 @@ interface AdminDashboardOverviewProps {
   totalServices: number;
   totalStorage: number;
   weeklyActivity: number[];
+  enterpriseName?: string | null;
+  enterpriseId?: number | null;
 }
 
 export const AdminDashboardOverview = ({
@@ -18,10 +20,16 @@ export const AdminDashboardOverview = ({
   totalServices,
   totalStorage,
   weeklyActivity,
+  enterpriseName,
+  enterpriseId,
 }: AdminDashboardOverviewProps) => {
   const maxActivity = Math.max(...weeklyActivity, 1);
   const [extraStorage, setExtraStorage] = useState(0);
   const [storageInput, setStorageInput] = useState("");
+
+  const enterpriseLabel = enterpriseName
+    ? enterpriseName
+    : (typeof enterpriseId === "number" ? `Entreprise #${enterpriseId}` : "votre entreprise");
 
   const handleAddStorage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +56,7 @@ export const AdminDashboardOverview = ({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">{totalDocuments}</p>
-            <p className="text-xs mt-1 opacity-90">Documents dans l'entreprise</p>
+            <p className="text-xs mt-1 opacity-90">Documents dans {enterpriseLabel}</p>
           </CardContent>
         </Card>
 
@@ -59,7 +67,7 @@ export const AdminDashboardOverview = ({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">{totalEmployees}</p>
-            <p className="text-xs mt-1 opacity-90">Utilisateurs actifs</p>
+            <p className="text-xs mt-1 opacity-90">Utilisateurs actifs dans {enterpriseLabel}</p>
           </CardContent>
         </Card>
 
@@ -70,7 +78,7 @@ export const AdminDashboardOverview = ({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">{totalServices}</p>
-            <p className="text-xs mt-1 opacity-90">Unités organisationnelles</p>
+            <p className="text-xs mt-1 opacity-90">Unités organisationnelles dans {enterpriseLabel}</p>
           </CardContent>
         </Card>
 
@@ -81,29 +89,12 @@ export const AdminDashboardOverview = ({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold">{(totalStorage + extraStorage).toFixed(1)} Go</p>
-            <p className="text-xs mt-1 opacity-90 mb-3">Capacité allouée</p>
+            <p className="text-xs mt-1 opacity-90 mb-3">Capacité allouée à {enterpriseLabel}</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Flux de documents (7 derniers jours)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-end gap-2 h-40">
-            {weeklyActivity.map((value, index) => (
-              <div key={index} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full rounded-t-md bg-primary/80"
-                  style={{ height: `${(value / maxActivity) * 100}%` }}
-                />
-                <span className="text-[10px] text-muted-foreground">J{index + 1}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+     
     </div>
   );
 };

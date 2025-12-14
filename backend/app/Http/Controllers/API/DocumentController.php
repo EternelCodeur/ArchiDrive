@@ -110,6 +110,7 @@ class DocumentController extends Controller
 
         $folderId = $request->query('folder_id');
         $serviceId = $request->query('service_id');
+        $countOnly = $request->query('count_only');
 
         // Permission context
         $ctxServiceId = null;
@@ -151,6 +152,21 @@ class DocumentController extends Controller
         $query = Document::query();
         if ($folderId) $query->where('folder_id', $folderId);
         if ($serviceId) $query->where('service_id', $serviceId);
+
+        // Default enterprise scoping when no folder/service context is specified
+        if (!$folderId && !$serviceId) {
+            if ($user->role !== 'super_admin') {
+                if (!$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+                $query->where('enterprise_id', $user->enterprise_id);
+            }
+        }
+
+        if ($countOnly) {
+            return response()->json(['count' => $query->count()]);
+        }
+
         return response()->json($query->orderByDesc('id')->get());
     }
 
