@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Upload, FolderPlus, Search, CheckSquare, Share2, Trash2 } from "lucide-react";
+import { Upload, FolderPlus, Search, CheckSquare, Share2, Trash2, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { FolderItem } from "./FolderItem";
 import { FileItem } from "./FileItem";
 import { Breadcrumb } from "./Breadcrumb";
 import { ShareModal } from "./ShareModal";
+import { ScannerModal } from "./ScannerModal";
 import { getFoldersByParent, getDocumentsByFolder, getFolderPath, getFolderById, isRuntimeFolder } from "@/data/mockData";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -61,6 +62,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   const [renamedFolders, setRenamedFolders] = useState<Record<number, string>>({});
   const [isRenameDocModalOpen, setIsRenameDocModalOpen] = useState(false);
   const [isRenameFolderModalOpen, setIsRenameFolderModalOpen] = useState(false);
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
   const [currentDocToRename, setCurrentDocToRename] = useState<{ id: number; name: string } | null>(null);
   const [currentFolderToRename, setCurrentFolderToRename] = useState<{ id: number; name: string } | null>(null);
   const [renameInput, setRenameInput] = useState("");
@@ -828,6 +830,15 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
                 <span className="hidden md:inline">Téléverser</span>
               </Button>
               <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => setIsScannerModalOpen(true)}
+              >
+                <ScanLine className="w-4 h-4 md:mr-2" />
+                <span className="hidden md:inline">Scanner</span>
+              </Button>
+              <Button
                 variant={selectionMode ? "default" : "outline"}
                 size="sm"
                 type="button"
@@ -855,50 +866,6 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
                   </>
                 )}
 
-      {/* Share folder modal */}
-      {canShareHere && (
-        <Dialog open={isShareFolderModalOpen} onOpenChange={setIsShareFolderModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Partager ce dossier</DialogTitle>
-              <DialogDescription>Définissez la visibilité de ce dossier partagé.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 text-sm">
-              <div className="space-y-1">
-                <p className="text-xs font-medium">Visibilité</p>
-                <select
-                  className="border rounded-md px-3 py-2 text-xs w-full"
-                  value={shareVisibility}
-                  onChange={(e) => setShareVisibility(e.target.value as any)}
-                >
-                  <option value="enterprise">Toute l'entreprise</option>
-                  <option value="services">Services sélectionnés</option>
-                </select>
-              </div>
-              {shareVisibility === 'services' && (
-                <div className="border rounded-md p-3 space-y-2">
-                  <p className="text-xs font-medium">Services autorisés</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    {adminServices.map((s) => {
-                      const checked = shareServiceIds.includes(s.id);
-                      return (
-                        <label key={s.id} className="flex items-center gap-2 text-xs">
-                          <Checkbox checked={checked} onCheckedChange={(v: any) => toggleShareService(s.id, Boolean(v))} />
-                          <span>{s.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsShareFolderModalOpen(false)}>Annuler</Button>
-              <Button onClick={handleLinkShare}>Partager</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
               </Button>
             </div>
           </div>
@@ -1011,6 +978,63 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         multiple
         className="hidden"
         onChange={handleFileChange}
+      />
+
+      {/* Share folder modal */}
+      {canShareHere && (
+        <Dialog open={isShareFolderModalOpen} onOpenChange={setIsShareFolderModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Partager ce dossier</DialogTitle>
+              <DialogDescription>Définissez la visibilité de ce dossier partagé.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm">
+              <div className="space-y-1">
+                <p className="text-xs font-medium">Visibilité</p>
+                <select
+                  className="border rounded-md px-3 py-2 text-xs w-full"
+                  value={shareVisibility}
+                  onChange={(e) => setShareVisibility(e.target.value as any)}
+                >
+                  <option value="enterprise">Toute l'entreprise</option>
+                  <option value="services">Services sélectionnés</option>
+                </select>
+              </div>
+              {shareVisibility === 'services' && (
+                <div className="border rounded-md p-3 space-y-2">
+                  <p className="text-xs font-medium">Services autorisés</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    {adminServices.map((s) => {
+                      const checked = shareServiceIds.includes(s.id);
+                      return (
+                        <label key={s.id} className="flex items-center gap-2 text-xs">
+                          <Checkbox checked={checked} onCheckedChange={(v: any) => toggleShareService(s.id, Boolean(v))} />
+                          <span>{s.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsShareFolderModalOpen(false)}>Annuler</Button>
+              <Button onClick={handleLinkShare}>Partager</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <ScannerModal
+        isOpen={isScannerModalOpen}
+        onClose={() => setIsScannerModalOpen(false)}
+        folderId={typeof selectedDbFolderId === 'number' ? selectedDbFolderId : null}
+        serviceId={typeof effectiveSelected?.service_id === 'number' ? (effectiveSelected.service_id as number) : null}
+        onUploaded={async () => {
+          if (typeof selectedDbFolderId === 'number') {
+            await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
+          }
+        }}
       />
 
       {/* Create folder modal */}
