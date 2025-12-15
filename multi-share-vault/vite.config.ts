@@ -5,8 +5,8 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const apiUrl = 'http://127.0.0.1:8000';
- // const apiUrl = 'https://www.archi-drive.ga';
+  //const apiUrl = 'http://127.0.0.1:8000';
+ const apiUrl = 'https://www.archi-drive.ga';
   return {
     server: {
       host: "::",
