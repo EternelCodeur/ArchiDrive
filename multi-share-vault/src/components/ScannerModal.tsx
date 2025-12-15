@@ -87,6 +87,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
   const [connected, setConnected] = useState(false);
   const [suspendModal, setSuspendModal] = useState(false);
   const [resourcesOk, setResourcesOk] = useState<boolean | null>(null);
+  const [runtimeProductKey, setRuntimeProductKey] = useState<string | undefined>(undefined);
   const [sources, setSources] = useState<string[]>([]);
   const [selectedSourceIndex, setSelectedSourceIndex] = useState<number | null>(null);
   const [sourceSelected, setSourceSelected] = useState(false);
@@ -100,7 +101,10 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
   const initAttemptedRef = useRef(false);
 
   const productKey = import.meta.env.VITE_DWT_PRODUCT_KEY as string | undefined;
-  const hasProductKey = Boolean(productKey && productKey.trim().length > 0);
+  const effectiveProductKey = (runtimeProductKey && runtimeProductKey.trim().length > 0)
+    ? runtimeProductKey
+    : productKey;
+  const hasProductKey = Boolean(effectiveProductKey && effectiveProductKey.trim().length > 0);
 
   const hasWebTwain = useMemo(() => Boolean((Dynamsoft as any)?.DWT), []);
   const viteMode = import.meta.env.MODE as string | undefined;
@@ -115,6 +119,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
     setConnecting(false);
     setSuspendModal(false);
     setResourcesOk(null);
+    setRuntimeProductKey(undefined);
     setSources([]);
     setSelectedSourceIndex(null);
     setPages([]);
@@ -122,6 +127,24 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
     setDocumentName("Document scanné");
     initAttemptedRef.current = false;
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (hasProductKey) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch('/api/config/webtwain', { method: 'GET' });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        const key = (data && (data.dwtProductKey as string | undefined)) || undefined;
+        if (!cancelled) setRuntimeProductKey(key);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [hasProductKey, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -146,7 +169,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
     }
 
     if (!hasProductKey) {
-      toast.error("Clé WebTWAIN manquante (VITE_DWT_PRODUCT_KEY)");
+      toast.error("Clé WebTWAIN manquante (VITE_DWT_PRODUCT_KEY ou /api/config/webtwain)");
       return false;
     }
 
@@ -164,7 +187,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       // ignore
     }
 
-    (Dynamsoft as any).DWT.ProductKey = productKey;
+    (Dynamsoft as any).DWT.ProductKey = effectiveProductKey;
     (Dynamsoft as any).DWT.ResourcesPath = "/dwt-resources";
     (Dynamsoft as any).DWT.IfCheckCORS = true;
     (Dynamsoft as any).DWT.Containers = [

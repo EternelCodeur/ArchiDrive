@@ -20,6 +20,13 @@ Route::get('/health', function () {
     return response()->json(['status' => 'OK']);
 });
 
+Route::get('/config/webtwain', function () {
+    $key = (string) env('DWT_PRODUCT_KEY', '');
+    return response()->json([
+        'dwtProductKey' => $key,
+    ]);
+});
+
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::middleware('jwt')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
