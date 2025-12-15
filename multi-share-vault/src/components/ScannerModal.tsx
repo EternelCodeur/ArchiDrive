@@ -20,6 +20,40 @@ type ScannerModalProps = {
   onUploaded?: () => void;
 };
 
+function normalizeDataUrlFromDwtBase64(raw: string, fallbackMime = "image/png"): string {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("data:")) return trimmed;
+  // WebTWAIN sometimes returns base64 with whitespace/newlines
+  const cleaned = trimmed.replace(/\s+/g, "");
+  return `data:${fallbackMime};base64,${cleaned}`;
+}
+
+function extractBase64StringFromDwt(result: any): string {
+  if (typeof result === "string") return result;
+  if (Array.isArray(result)) {
+    const first = result[0];
+    if (typeof first === "string") return first;
+  }
+  if (result && typeof result === "object") {
+    if (typeof (result as any)._content === "string") return (result as any)._content;
+    const candidates = [
+      (result as any).base64,
+      (result as any).Base64,
+      (result as any).data,
+      (result as any).Data,
+      (result as any).strBase64,
+      (result as any).StrBase64,
+      (result as any).value,
+      (result as any).Value,
+    ];
+    for (const c of candidates) {
+      if (typeof c === "string") return c;
+    }
+  }
+  return "";
+}
+
 function createMockPageDataUrl(pageNumber: number): string {
   const canvas = document.createElement("canvas");
   canvas.width = 600;
@@ -48,10 +82,14 @@ function createMockPageDataUrl(pageNumber: number): string {
 }
 
 export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded }: ScannerModalProps) => {
-  const [step, setStep] = useState<"connect" | "scan">("connect");
+  const [view, setView] = useState<"main" | "merge" | "select">("main");
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [suspendModal, setSuspendModal] = useState(false);
   const [resourcesOk, setResourcesOk] = useState<boolean | null>(null);
+  const [sources, setSources] = useState<string[]>([]);
+  const [selectedSourceIndex, setSelectedSourceIndex] = useState<number | null>(null);
+  const [sourceSelected, setSourceSelected] = useState(false);
 
   const [pages, setPages] = useState<ScannedPage[]>([]);
   const [scanLoading, setScanLoading] = useState(false);
@@ -73,10 +111,12 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
 
   useEffect(() => {
     if (!isOpen) return;
-    setStep("connect");
+    setView("main");
     setConnecting(false);
-    setConnected(false);
+    setSuspendModal(false);
     setResourcesOk(null);
+    setSources([]);
+    setSelectedSourceIndex(null);
     setPages([]);
     setScanLoading(false);
     setDocumentName("Document scanné");
@@ -96,16 +136,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
     if (initAttemptedRef.current) return;
     if (!hasWebTwain || !hasProductKey) return;
     initAttemptedRef.current = true;
-
-    setConnecting(true);
-    initWebTwain()
-      .then((ok) => {
-        if (!ok) return;
-        setConnected(true);
-        setStep("scan");
-        toast.success("Scanner prêt (WebTWAIN)");
-      })
-      .finally(() => setConnecting(false));
+    initWebTwain().catch(() => { /* ignore */ });
   }, [hasProductKey, hasWebTwain, isOpen]);
 
   const initWebTwain = async () => {
@@ -153,7 +184,64 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       return false;
     }
 
+    // Populate available sources (avoid blocking SelectSource dialog)
+    try {
+      const dwt = dwtObjectRef.current;
+      const names: string[] | undefined = typeof dwt.GetSourceNameItems === "function" ? dwt.GetSourceNameItems() : undefined;
+      if (Array.isArray(names) && names.length > 0) {
+        setSources(names);
+        setSelectedSourceIndex((prev) => (typeof prev === "number" ? prev : 0));
+      } else if (typeof dwt.SourceCount === "number" && typeof dwt.GetSourceNameItems === "function") {
+        const list = dwt.GetSourceNameItems();
+        if (Array.isArray(list) && list.length > 0) {
+          setSources(list);
+          setSelectedSourceIndex((prev) => (typeof prev === "number" ? prev : 0));
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     return true;
+  };
+
+  const stopScanner = () => {
+    const dwt = dwtObjectRef.current;
+    try {
+      if (dwt && typeof dwt.CloseSource === "function") dwt.CloseSource();
+    } catch { /* ignore */ }
+    setConnected(false);
+    setSourceSelected(false);
+    toast.message("Scanner arrêté");
+  };
+
+  const changeScanner = async () => {
+    setView("select");
+    setConnecting(true);
+    try {
+      await handleConnect();
+      // If connect succeeded, return to main view.
+      setView("main");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const refreshSources = () => {
+    const dwt = dwtObjectRef.current;
+    if (!dwt) return;
+    try {
+      const names: string[] | undefined = typeof dwt.GetSourceNameItems === "function" ? dwt.GetSourceNameItems() : undefined;
+      if (Array.isArray(names)) {
+        setSources(names);
+        setSelectedSourceIndex((prev) => {
+          if (typeof prev === "number" && prev >= 0 && prev < names.length) return prev;
+          return names.length > 0 ? 0 : null;
+        });
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handleConnect = async () => {
@@ -161,13 +249,40 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       toast.error("WebTWAIN (Dynamsoft) non détecté sur ce poste");
       return;
     }
+    if (!hasProductKey) {
+      toast.error("Clé WebTWAIN manquante (VITE_DWT_PRODUCT_KEY)");
+      return;
+    }
     setConnecting(true);
     try {
       const ok = await initWebTwain();
       if (!ok) return;
+
+      // User-requested flow: show the native source selection dialog on connect.
+      const dwt = dwtObjectRef.current;
+      if (dwt && typeof dwt.SelectSourceAsync === "function") {
+        try {
+          // Hide our own modal while the native source picker is open.
+          setSuspendModal(true);
+          await dwt.SelectSourceAsync();
+          setSourceSelected(true);
+        } catch (e: any) {
+          toast.error(e?.message || "Sélection du scanner annulée/échouée");
+          return;
+        } finally {
+          setSuspendModal(false);
+        }
+      } else if (dwt && typeof selectedSourceIndex === "number" && typeof dwt.SelectSourceByIndex === "function") {
+        try {
+          dwt.SelectSourceByIndex(selectedSourceIndex);
+          setSourceSelected(true);
+        } catch {
+          // ignore
+        }
+      }
+
       setConnected(true);
-      setStep("scan");
-      toast.success("Scanner prêt (WebTWAIN)");
+      toast.success("Scanner connecté");
     } finally {
       setConnecting(false);
     }
@@ -194,18 +309,30 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
         IfCloseSourceAfterAcquire: true,
       };
 
-      if (typeof dwt.SelectSourceAsync === "function") {
-        await dwt.SelectSourceAsync();
+      // Avoid re-opening the source selection dialog if user already selected a source during "connect".
+      if (!sourceSelected) {
+        if (typeof selectedSourceIndex === "number" && typeof dwt.SelectSourceByIndex === "function") {
+          dwt.SelectSourceByIndex(selectedSourceIndex);
+          setSourceSelected(true);
+        } else if (typeof dwt.SelectSourceAsync === "function") {
+          await dwt.SelectSourceAsync();
+          setSourceSelected(true);
+        }
       }
 
       if (typeof dwt.OpenSource === "function") {
         try { dwt.OpenSource(); } catch { /* ignore */ }
       }
 
+      const withTimeout = async <T,>(p: Promise<T>, ms: number) => Promise.race<T>([
+        p,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Timeout scanner (sélection source bloquée ?)")), ms)),
+      ]);
+
       if (typeof dwt.AcquireImageAsync === "function") {
-        await dwt.AcquireImageAsync(deviceConfiguration);
+        await withTimeout(dwt.AcquireImageAsync(deviceConfiguration), 45000);
       } else if (typeof dwt.AcquireImage === "function") {
-        await new Promise<void>((resolve, reject) => {
+        await withTimeout(new Promise<void>((resolve, reject) => {
           try {
             if (typeof dwt.AcquireImage === "function") {
               dwt.AcquireImage(
@@ -226,7 +353,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
             try { if (typeof dwt.CloseSource === "function") dwt.CloseSource(); } catch { /* ignore */ }
             reject(e);
           }
-        });
+        }), 45000);
       } else {
         return false;
       }
@@ -246,17 +373,32 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       const thumbs: ScannedPage[] = [];
       for (let i = 0; i < newIndices.length; i += 1) {
         const idx = newIndices[i];
-        const base64: string = await new Promise((resolve, reject) => {
+        const base64Raw: any = await new Promise((resolve, reject) => {
           dwt.ConvertToBase64(
             [idx],
             imageType,
-            (result: string) => resolve(result),
+            (result: any) => resolve(result),
             (error: any) => reject(error),
           );
         });
+        const base64 = extractBase64StringFromDwt(base64Raw);
+        if (!base64) {
+          // eslint-disable-next-line no-console
+          console.warn("WebTWAIN ConvertToBase64 returned non-string", base64Raw);
+        }
+
+        const dataUrl = normalizeDataUrlFromDwtBase64(base64, "image/png");
+        if (!dataUrl) {
+          thumbs.push({
+            id: Date.now() + i,
+            dataUrl: createMockPageDataUrl(i + 1),
+            bufferIndex: idx,
+          });
+          continue;
+        }
         thumbs.push({
           id: Date.now() + i,
-          dataUrl: `data:image/png;base64,${base64}`,
+          dataUrl,
           bufferIndex: idx,
         });
       }
@@ -264,19 +406,20 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
 
       return true;
     } catch (e: any) {
+      try { if (typeof dwt.CloseSource === "function") dwt.CloseSource(); } catch { /* ignore */ }
       toast.error(e?.message || "Échec du scan WebTWAIN");
       return false;
     }
   };
 
-  const handleMockScan = async () => {
+  const handleAddPage = async () => {
     if (!connected) return;
     setScanLoading(true);
     try {
       if (hasWebTwain) {
         const ok = await tryScanWithWebTwain();
         if (ok) {
-          toast.success("Scan terminé");
+          toast.success("Page ajoutée");
           return;
         }
       }
@@ -289,7 +432,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
         }));
         return [...prev, ...next];
       });
-      toast.success("Pages scannées ajoutées");
+      toast.success("Page ajoutée");
     } finally {
       setScanLoading(false);
     }
@@ -373,112 +516,167 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open={isOpen && !suspendModal} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Scanner</DialogTitle>
-          <DialogDescription>
-            {step === "connect" ? "Connectez-vous au scanner pour démarrer un scan." : "Lancez un scan, supprimez les pages inutiles puis enregistrez."}
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <DialogTitle>Scanner</DialogTitle>
+              <DialogDescription>
+                {view === 'merge' ? 'Fusionnez et nommez votre document avant l’enregistrement.' : 'Ajoutez des pages scannées puis fusionnez le document.'}
+              </DialogDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setPages([]);
+                  setView('main');
+                }}
+              >
+                Vider
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={changeScanner}
+              >
+                Changer scanner
+              </Button>
+            </div>
+          </div>
         </DialogHeader>
 
-        {step === "connect" && (
-          <div className="space-y-3">
-            <div className="text-sm text-muted-foreground border rounded-md p-4">
-              {!hasWebTwain ? (
-                <div>
-                  WebTWAIN (Dynamsoft) n’est pas disponible sur ce poste. Installe/active le service WebTWAIN puis recharge la page.
-                </div>
-              ) : !hasProductKey ? (
-                <div>
-                  WebTWAIN est détecté, mais la clé n’est pas configurée. Ajoute <span className="font-medium">VITE_DWT_PRODUCT_KEY</span> dans <span className="font-medium">.env.development</span> puis redémarre le serveur.
-                </div>
-              ) : connecting ? (
-                <div>
-                  Connexion au scanner…
-                </div>
-              ) : (
-                <div>
-                  WebTWAIN détecté et clé configurée.
-                </div>
-              )}
+        <div id={dwtContainerId} className="h-0 w-0 overflow-hidden" />
 
-              <div className="mt-3 text-xs text-muted-foreground">
-                <div><span className="font-medium">Origin:</span> {origin || "?"}</div>
-                <div><span className="font-medium">Vite mode:</span> {viteMode ?? "?"}</div>
-                <div><span className="font-medium">import.meta.env:</span> {envPresent ? "ok" : "absent"}</div>
-                <div><span className="font-medium">Clé détectée:</span> {hasProductKey ? "oui" : "non"}</div>
-                <div><span className="font-medium">Ressources /dwt-resources:</span> {resourcesOk === null ? "test…" : (resourcesOk ? "ok" : "404/erreur")}</div>
+        {view === 'select' && (
+          <div className="space-y-4">
+            <div className="border rounded-md p-6 text-sm text-muted-foreground">
+              <div className="font-medium text-foreground mb-1">Sélection du scanner</div>
+              <div>
+                Une fenêtre de sélection va s’ouvrir. Choisis ton scanner, puis reviens ici.
               </div>
             </div>
 
-            <div id={dwtContainerId} className="h-0 w-0 overflow-hidden" />
-
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
-              <Button type="button" onClick={handleConnect} disabled={connecting || !hasWebTwain || !hasProductKey}>
-                Réessayer
+              <Button type="button" variant="outline" onClick={() => setView("main")}>
+                Annuler
+              </Button>
+              <Button type="button" onClick={changeScanner} disabled={connecting || !hasWebTwain || !hasProductKey}>
+                {connecting ? "Ouverture…" : "Choisir un scanner"}
               </Button>
             </DialogFooter>
           </div>
         )}
 
-        {step === "scan" && (
+        {view === 'main' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm">
-                <span className="font-medium">Scanner:</span> WebTWAIN
-              </div>
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" onClick={() => { setConnected(false); setStep("connect"); }}>
-                  Changer de scanner
-                </Button>
-                <Button type="button" onClick={handleMockScan} disabled={scanLoading}>
-                  {scanLoading ? "Scan…" : "Lancer un scan"}
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-xs font-medium">Pages scannées ({pages.length})</div>
+            <div className="min-h-[320px] border rounded-md bg-background">
               {pages.length === 0 ? (
-                <div className="text-sm text-muted-foreground border rounded-md p-6 text-center">
-                  Aucun scan pour le moment. Clique sur « Lancer un scan ».
+                <div className="h-[320px] flex items-center justify-center text-sm text-muted-foreground">
+                  Aucun document scanné pour le moment.
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {pages.map((p, idx) => (
-                    <div key={p.id} className="border rounded-md overflow-hidden bg-card">
-                      <div className="aspect-[3/4] bg-muted">
-                        <img src={p.dataUrl} alt={`Page ${idx + 1}`} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="p-2 flex items-center justify-between gap-2">
-                        <div className="text-xs text-muted-foreground truncate">Page {idx + 1}</div>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removePage(p.id)}>
-                          Retirer
-                        </Button>
-                      </div>
+                <div className="p-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {pages.map((p) => (
+                    <div key={p.id} className="relative border rounded-md overflow-hidden">
+                      <img src={p.dataUrl} alt="Page" className="w-full h-44 object-cover" />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="absolute top-2 right-2"
+                        onClick={() => removePage(p.id)}
+                      >
+                        ✕
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-              <div className="md:col-span-2 space-y-1">
-                <div className="text-xs font-medium">Nom du document</div>
-                <Input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Ex: Facture - Décembre" />
-              </div>
-              <div className="flex items-center gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={onClose}>Fermer</Button>
-                <Button type="button" onClick={handleSave} disabled={!canSave}>
-                  Enregistrer
+            <DialogFooter>
+              <div className="w-full flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddPage}
+                  disabled={!connected || scanLoading}
+                >
+                  {scanLoading ? 'Scan…' : 'Ajouter une page'}
+                </Button>
+
+                {!connected ? (
+                  <Button
+                    type="button"
+                    onClick={handleConnect}
+                    disabled={connecting || !hasWebTwain || !hasProductKey}
+                  >
+                    {connecting ? 'Connexion…' : 'Se connecter au scanner'}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" onClick={stopScanner}>
+                    Arrêter
+                  </Button>
+                )}
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setView('merge')}
+                  disabled={pages.length === 0}
+                >
+                  Fusionner
                 </Button>
               </div>
+            </DialogFooter>
+
+            {(!hasWebTwain || !hasProductKey || resourcesOk === false) && (
+              <div className="text-xs text-muted-foreground border rounded-md p-3">
+                {!hasWebTwain ? 'WebTWAIN non disponible sur ce poste.' : null}
+                {hasWebTwain && !hasProductKey ? 'Clé WebTWAIN manquante (VITE_DWT_PRODUCT_KEY).' : null}
+                {resourcesOk === false ? 'Ressources WebTWAIN introuvables (/dwt-resources).' : null}
+                <div className="mt-2">
+                  <span className="font-medium">Origin:</span> {origin || '?'} — <span className="font-medium">Mode:</span> {viteMode ?? '?'} — <span className="font-medium">env:</span> {envPresent ? 'ok' : 'absent'}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === 'merge' && (
+          <div className="space-y-4">
+            <div className="border rounded-md p-4 text-sm">
+              <div className="font-medium mb-1">Fusion du document</div>
+              <div className="text-muted-foreground">
+                Donnez un nom à votre document puis enregistrez-le.
+              </div>
             </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-medium">Nom du document</div>
+              <Input
+                value={documentName}
+                onChange={(e) => setDocumentName(e.target.value)}
+                placeholder="Nom d’inscription / Nom du document"
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setView('main')}>
+                Retour
+              </Button>
+              <Button type="button" onClick={handleSave} disabled={!canSave}>
+                Enregistrer
+              </Button>
+            </DialogFooter>
           </div>
         )}
       </DialogContent>
     </Dialog>
   );
 };
+
+export default ScannerModal;
