@@ -19,4 +19,9 @@ class Document extends Model
         'size_bytes',
         'created_by',
     ];
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

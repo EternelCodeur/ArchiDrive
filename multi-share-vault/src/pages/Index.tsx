@@ -133,7 +133,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-        <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} />
+        <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} currentFolderId={currentFolderId} />
         
         <div className="flex-1 flex overflow-hidden">
           <div className="hidden md:block">

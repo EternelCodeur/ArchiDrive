@@ -25,6 +25,7 @@ type BackendDocument = {
   mime_type: string | null;
   size_bytes: number;
   created_by?: number | null;
+  created_by_name?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -211,7 +212,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       folder_id: doc.folder_id ?? (selectedDbFolderId ?? 0),
       size,
       created_at: doc.created_at || new Date().toISOString(),
-      author: user?.name || '',
+      author: doc.created_by_name || '',
       type,
     };
   });

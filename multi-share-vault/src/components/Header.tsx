@@ -14,8 +14,23 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { mockEnterprises } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 
-export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => void }) => {
+type RecentUpload = {
+  id: number;
+  name: string;
+  created_at?: string;
+  created_by_name?: string | null;
+};
+
+export const Header = ({
+  onOpenMobileSidebar,
+  currentFolderId,
+}: {
+  onOpenMobileSidebar?: () => void;
+  currentFolderId?: number | null;
+}) => {
   const { user, logout } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -40,6 +55,20 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
 
   const badge = user ? getRoleBadge(user.role) : null;
 
+  const { data: recentUploads = [], isLoading: isRecentLoading } = useQuery<RecentUpload[]>({
+    queryKey: ["recent-uploads", user?.id ?? 0, currentFolderId ?? null],
+    enabled: !!user,
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      qs.set('limit', '5');
+      if (typeof currentFolderId === 'number') qs.set('folder_id', String(currentFolderId));
+      const res = await apiFetch(`/api/documents/recent?${qs.toString()}`, { toast: { error: { enabled: false } } });
+      if (!res.ok) return [] as RecentUpload[];
+      return res.json();
+    },
+    staleTime: 15_000,
+  });
+
   return (
     <header className="h-16 border-b bg-card/70 backdrop-blur-sm sticky top-0 z-20">
       <div className="h-full px-4 md:px-6 flex items-center justify-between gap-3">
@@ -60,11 +89,46 @@ export const Header = ({ onOpenMobileSidebar }: { onOpenMobileSidebar?: () => vo
         </div>
 
         <div className="flex items-center gap-3">
-          {user?.role === "agent" && (
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
-            </Button>
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+                  <Bell className="w-5 h-5" />
+                  {recentUploads.length > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel>Derniers téléversements</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+
+                {isRecentLoading && (
+                  <DropdownMenuItem disabled>Chargement…</DropdownMenuItem>
+                )}
+
+                {!isRecentLoading && recentUploads.length === 0 && (
+                  <DropdownMenuItem disabled>Aucun téléversement récent</DropdownMenuItem>
+                )}
+
+                {!isRecentLoading && recentUploads.map((doc) => (
+                  <DropdownMenuItem
+                    key={doc.id}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      navigate(`/documents/${doc.id}`);
+                    }}
+                    className="flex flex-col items-start gap-0.5"
+                  >
+                    <span className="text-sm font-medium truncate w-full">{doc.name}</span>
+                    <span className="text-xs text-muted-foreground truncate w-full">
+                      {(doc.created_by_name ? `Téléversé par ${doc.created_by_name}` : 'Téléversé par —')}
+                      {doc.created_at ? ` • ${new Date(doc.created_at).toLocaleString('fr-FR')}` : ''}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
 
           <DropdownMenu>

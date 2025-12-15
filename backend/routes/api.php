@@ -54,6 +54,7 @@ Route::middleware('jwt')->group(function () {
     });
 
     // Documents CRUD
+    Route::get('documents/recent', [\App\Http\Controllers\API\DocumentController::class, 'recent']);
     Route::apiResource('documents', \App\Http\Controllers\API\DocumentController::class);
     Route::get('documents/{document}/download', [\App\Http\Controllers\API\DocumentController::class, 'download']);
 

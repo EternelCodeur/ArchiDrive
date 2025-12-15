@@ -39,7 +39,7 @@ export const FileItem = ({ document, selectionMode, selected, onToggleSelect, on
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{document.size}</span>
           <span>•</span>
-          <span>{document.author}</span>
+          <span>{document.author ? `Téléversé par ${document.author}` : 'Téléversé par —'}</span>
           <span>•</span>
           <span>{new Date(document.created_at).toLocaleDateString('fr-FR')}</span>
         </div>

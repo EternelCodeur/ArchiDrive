@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import Profile from "./pages/Profile";
+import DocumentView from "./pages/DocumentView";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "@/contexts/AuthContext";
 
@@ -56,6 +57,14 @@ const router = createBrowserRouter(
       element: (
         <ProtectedRoute allowedRoles={["agent", "admin", "super_admin"]}>
           <Profile />
+        </ProtectedRoute>
+      ),
+    },
+    {
+      path: "/documents/:id",
+      element: (
+        <ProtectedRoute allowedRoles={["agent", "admin", "super_admin"]}>
+          <DocumentView />
         </ProtectedRoute>
       ),
     },

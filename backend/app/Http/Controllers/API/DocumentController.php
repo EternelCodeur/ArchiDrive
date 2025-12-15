@@ -149,7 +149,7 @@ class DocumentController extends Controller
             }
         }
 
-        $query = Document::query();
+        $query = Document::query()->with('creator');
         if ($folderId) $query->where('folder_id', $folderId);
         if ($serviceId) $query->where('service_id', $serviceId);
 
@@ -167,7 +167,96 @@ class DocumentController extends Controller
             return response()->json(['count' => $query->count()]);
         }
 
-        return response()->json($query->orderByDesc('id')->get());
+        $docs = $query->orderByDesc('id')->get()->map(function ($doc) {
+            $arr = $doc->toArray();
+            $arr['created_by_name'] = $doc->creator?->name;
+            return $arr;
+        });
+
+        return response()->json($docs);
+    }
+
+    public function recent(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+
+        $folderId = $request->query('folder_id');
+        $limit = (int)($request->query('limit') ?? 5);
+        if ($limit <= 0) $limit = 5;
+        if ($limit > 20) $limit = 20;
+
+        // Determine context service id
+        $ctxServiceId = null;
+        if ($folderId) {
+            $folder = Folder::find($folderId);
+            if ($folder) {
+                $ctxServiceId = $folder->service_id;
+            } else {
+                // invalid folder id: fallback to service scope below
+                $folderId = null;
+            }
+        } else {
+            // For agents, never rely on a user.service_id field (may be null) and never fall back to enterprise
+            if ($user->role === 'agent') {
+                $emp = Employee::where('user_id', $user->id)->first();
+                $ctxServiceId = $emp?->service_id;
+            } else {
+                $ctxServiceId = $user->service_id ?? null;
+            }
+        }
+
+        // Agents must always be scoped to a service when not in a shared folder context
+        if ($user->role === 'agent' && !$folderId && !$ctxServiceId) {
+            return response()->json([]);
+        }
+
+        if ($ctxServiceId) {
+            if ($user->role === 'admin') {
+                $svc = Service::find($ctxServiceId);
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            }
+            if ($user->role === 'agent') {
+                $svc = Service::find($ctxServiceId);
+                if ((bool)($user->can_view_all_services ?? false) === true) {
+                    if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
+                } else {
+                    $emp = Employee::where('user_id', $user->id)->first();
+                    if (!$emp || (int)$emp->service_id !== (int)$ctxServiceId) {
+                        // Allow if folder is visible via shared folder rule
+                        if ($folderId && $this->isFolderInVisibleSharedTree($user, (int)$folderId)) {
+                            // allowed
+                        } else {
+                            return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                        }
+                    }
+                }
+            }
+        }
+
+        $query = Document::query()->with('creator');
+        if ($folderId) {
+            $query->where('folder_id', $folderId);
+        } elseif ($ctxServiceId) {
+            $query->where('service_id', $ctxServiceId);
+        } else {
+            // Fallback: scope to enterprise when service is unknown
+            if ($user->role !== 'super_admin' && $user->enterprise_id) {
+                $query->where('enterprise_id', $user->enterprise_id);
+            }
+        }
+
+        $docs = $query->orderByDesc('id')->limit($limit)->get()->map(function ($doc) {
+            $arr = $doc->toArray();
+            $arr['created_by_name'] = $doc->creator?->name;
+            return $arr;
+        });
+
+        return response()->json($docs);
     }
 
     public function store(Request $request)
@@ -283,7 +372,10 @@ class DocumentController extends Controller
                 }
             }
         }
-        return response()->json($document);
+        $document->load('creator');
+        $arr = $document->toArray();
+        $arr['created_by_name'] = $document->creator?->name;
+        return response()->json($arr);
     }
 
     public function update(Request $request, Document $document)
@@ -409,9 +501,21 @@ class DocumentController extends Controller
             }
         }
         if ($user->role === 'agent') {
-            $emp = Employee::where('user_id', $user->id)->first();
-            if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
-                return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+            $svc = Service::find($serviceId);
+            if ((bool)($user->can_view_all_services ?? false) === true) {
+                if ($svc && (int)$svc->enterprise_id !== (int)$user->enterprise_id) {
+                    return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                }
+            } else {
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp || (int)$emp->service_id !== (int)$serviceId) {
+                    // Allow if the document belongs to a folder inside a visible shared folder tree
+                    if ($document->folder_id && $this->isFolderInVisibleSharedTree($user, (int)$document->folder_id)) {
+                        // allowed via shared folder rule
+                    } else {
+                        return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+                    }
+                }
             }
         }
 
