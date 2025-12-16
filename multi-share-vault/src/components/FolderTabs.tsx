@@ -55,7 +55,7 @@ export const FolderTabs = ({
   }
 
   return (
-    <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col">
+    <Tabs value={activeTab} onValueChange={onTabChange} className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-auto p-0 gap-0 overflow-x-auto">
         {tabs.map((tab) => (
           <TabsTrigger
@@ -91,7 +91,7 @@ export const FolderTabs = ({
         <TabsContent
           key={tab.id}
           value={tab.id.toString()}
-          className="flex-1 m-0 data-[state=inactive]:hidden"
+          className="flex flex-col flex-1 min-h-0 h-full m-0 data-[state=inactive]:hidden overflow-hidden"
         >
           <FolderView folderId={tab.folderId} onFolderClick={onFolderClick} />
         </TabsContent>

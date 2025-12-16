@@ -132,7 +132,7 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-screen overflow-hidden flex flex-col bg-background">
         <Header onOpenMobileSidebar={() => setMobileSidebarOpen(true)} currentFolderId={currentFolderId} />
         
         <div className="flex-1 flex overflow-hidden">
@@ -140,7 +140,7 @@ const Index = () => {
             <Sidebar onFolderClick={handleFolderClick} currentFolderId={currentFolderId} collapseFolderId={collapseFolderId} onCloseTabByFolderId={handleCloseTabByFolderId} />
           </div>
           
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <FolderTabs
               tabs={openTabs}
               activeTab={activeTabId}
