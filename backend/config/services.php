@@ -39,4 +39,8 @@ return [
         'product_key' => env('DWT_PRODUCT_KEY', ''),
     ],
 
+    'firebase' => [
+        'server_key' => env('FIREBASE_FCM_SERVER_KEY', ''),
+    ],
+
 ];

@@ -15,6 +15,8 @@ use App\Http\Controllers\API\PublicFolderController;
 use App\Http\Controllers\API\FolderController;
 use App\Http\Controllers\API\UiPreferencesController;
 use App\Http\Controllers\API\SharedFolderController;
+use App\Http\Controllers\API\FcmTokenController;
+use App\Http\Controllers\API\DocumentController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'OK']);
@@ -31,6 +33,10 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 Route::middleware('jwt')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+    // FCM token registration
+    Route::post('/fcm/token', [FcmTokenController::class, 'store']);
+    Route::delete('/fcm/token', [FcmTokenController::class, 'destroy']);
 
     // Enterprise UI preferences (theme & accent)
     Route::get('/ui-preferences', [UiPreferencesController::class, 'show']);

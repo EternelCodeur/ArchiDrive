@@ -9,6 +9,8 @@ use App\Models\Service;
 use App\Models\Enterprise;
 use App\Models\Employee;
 use App\Models\SharedFolder;
+use App\Models\UserFcmToken;
+use App\Services\FcmService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
@@ -338,6 +340,40 @@ class DocumentController extends Controller
             'size_bytes' => $uploaded->getSize(),
             'created_by' => $user->id,
         ]);
+
+        try {
+            $userIds = Employee::where('service_id', $serviceId)
+                ->whereNotNull('user_id')
+                ->where('user_id', '!=', $user->id)
+                ->pluck('user_id')
+                ->map(fn ($v) => (int) $v)
+                ->values()
+                ->all();
+
+            $tokens = UserFcmToken::whereIn('user_id', $userIds)->pluck('token')->values()->all();
+
+            $title = 'Nouveau document';
+            $uploader = $user->name ? $user->name : 'Quelqu\'un';
+            $docName = $doc->name ?: 'Document';
+            $body = $uploader . ' a ajouté : ' . $docName;
+            $message = [
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body,
+                ],
+                'data' => [
+                    'type' => 'document_created',
+                    'document_id' => (string) $doc->id,
+                    'document_name' => (string) $docName,
+                    'created_by_name' => (string) $uploader,
+                    'service_id' => (string) $serviceId,
+                ],
+            ];
+
+            app(FcmService::class)->sendToTokens($tokens, $message);
+        } catch (\Throwable $e) {
+            // ignore
+        }
 
         return response()->json($doc, Response::HTTP_CREATED);
     }
