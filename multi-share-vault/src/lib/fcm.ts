@@ -66,7 +66,15 @@ export async function registerFcmServiceWorker(): Promise<ServiceWorkerRegistrat
   if (!("serviceWorker" in navigator)) return null;
   const swUrl = buildSwUrl();
   try {
-    return await navigator.serviceWorker.register(swUrl, { scope: "/" });
+    await navigator.serviceWorker.register(swUrl, { scope: "/" });
+    // Ensure an active SW is controlling the page before attempting Push subscription.
+    // Without this, getToken() can fail with "no active Service Worker".
+    try {
+      const readyReg = await navigator.serviceWorker.ready;
+      return readyReg;
+    } catch {
+      return navigator.serviceWorker.getRegistration("/") ?? null;
+    }
   } catch (e: any) {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const permission = typeof Notification !== "undefined" ? Notification.permission : "";
@@ -105,6 +113,10 @@ export async function ensureFcmToken(device?: string): Promise<string | null> {
   }
 
   const registration = await registerFcmServiceWorker();
+  if (!registration?.active) {
+    // If SW is not active, Push subscription will fail; don't spam errors.
+    return null;
+  }
 
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
   if (!vapidKey) {
