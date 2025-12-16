@@ -21,7 +21,7 @@ Route::get('/health', function () {
 });
 
 Route::get('/config/webtwain', function () {
-    $key = (string) env('DWT_PRODUCT_KEY', '');
+    $key = (string) config('services.dwt.product_key', '');
     return response()->json([
         'dwtProductKey' => $key,
     ]);

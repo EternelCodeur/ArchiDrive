@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'dwt' => [
+        'product_key' => env('DWT_PRODUCT_KEY', ''),
+    ],
+
 ];
