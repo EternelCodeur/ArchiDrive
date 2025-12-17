@@ -200,6 +200,9 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       return res.json();
     },
     staleTime: 10_000,
+    // In dev, php artisan serve uses PHP's built-in server which doesn't handle long-lived SSE well.
+    // Poll instead to keep the UI responsive.
+    refetchInterval: import.meta.env.DEV ? 2500 : false,
   });
   // Map backend fields to UI fields (size human-readable, type from mime)
   const uiDocuments = serverDocuments.map((doc) => {
@@ -218,6 +221,61 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       type,
     };
   });
+
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    if (!user) return;
+    if (typeof window === 'undefined') return;
+    if (typeof EventSource === 'undefined') return;
+
+    let es: EventSource | null = null;
+    let retryTimer: any = null;
+
+    const connect = () => {
+      try {
+        es = new EventSource('/api/events/documents');
+      } catch {
+        es = null;
+        return;
+      }
+
+      es.addEventListener('documents', (evt: MessageEvent) => {
+        let data: any = null;
+        try { data = JSON.parse(String(evt.data || '{}')); } catch { data = null; }
+        const payload = data?.payload ?? null;
+        if (!payload) return;
+        if (payload.type !== 'document_created') return;
+        if (payload.created_by && user?.id && Number(payload.created_by) === Number(user.id)) return;
+
+        // Force refresh of the currently viewed folder's documents.
+        try {
+          queryClient.invalidateQueries({ queryKey: ['documents-by-folder'] });
+          queryClient.refetchQueries({ queryKey: ['documents-by-folder'] });
+        } catch { void 0 }
+      });
+
+      es.onerror = () => {
+        try { es?.close(); } catch { void 0 }
+        es = null;
+        if (retryTimer) return;
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          connect();
+        }, 1500);
+      };
+    };
+
+    connect();
+
+    return () => {
+      if (retryTimer) {
+        try { clearTimeout(retryTimer); } catch { void 0 }
+        retryTimer = null;
+      }
+      try { es?.close(); } catch { void 0 }
+      es = null;
+    };
+  }, [user?.id, queryClient]);
 
   useEffect(() => {
     let cancelled = false;

@@ -122,7 +122,7 @@ export const Header = ({
                   >
                     <span className="text-sm font-medium truncate w-full">{doc.name}</span>
                     <span className="text-xs text-muted-foreground truncate w-full">
-                      {(doc.created_by_name ? `Téléversé par ${doc.created_by_name}` : 'Téléversé par —')}
+                      {(doc.created_by_name ? `Par ${doc.created_by_name}` : 'Par —')}
                       {doc.created_at ? ` • ${new Date(doc.created_at).toLocaleString('fr-FR')}` : ''}
                     </span>
                   </DropdownMenuItem>

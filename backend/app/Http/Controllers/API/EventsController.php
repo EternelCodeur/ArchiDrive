@@ -104,4 +104,40 @@ class EventsController extends Controller
 
         return $response;
     }
+
+    public function documents(Request $request)
+    {
+        $response = new StreamedResponse(function () {
+            $last = Cache::get('documents_events_sequence', 0);
+            $start = time();
+            while (true) {
+                $current = Cache::get('documents_events_sequence', 0);
+                if ($current !== $last) {
+                    $payload = Cache::get('documents_last_event', null);
+                    echo "event: documents\n";
+                    echo 'data: ' . json_encode([
+                        'seq' => (int) $current,
+                        'payload' => $payload,
+                    ]) . "\n";
+                    echo 'id: ' . ((int)$current) . "\n\n";
+                    @ob_flush();
+                    @flush();
+                    $last = $current;
+                }
+
+                if ((time() - $start) > 60) {
+                    break;
+                }
+
+                usleep(250000);
+            }
+        });
+
+        $response->headers->set('Content-Type', 'text/event-stream');
+        $response->headers->set('Cache-Control', 'no-cache');
+        $response->headers->set('X-Accel-Buffering', 'no');
+        $response->headers->set('Connection', 'keep-alive');
+
+        return $response;
+    }
 }

@@ -102,4 +102,7 @@ Route::middleware('jwt')->group(function () {
         Route::get('/events/services', [EventsController::class, 'services']);
         Route::get('/events/employees', [EventsController::class, 'employees']);
     });
+
+    // SSE endpoint for documents updates (available to any authenticated user)
+    Route::get('/events/documents', [EventsController::class, 'documents']);
 });

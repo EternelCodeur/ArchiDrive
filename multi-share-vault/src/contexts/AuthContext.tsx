@@ -2,9 +2,6 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useQueryClient } from '@tanstack/react-query';
 import { User } from '@/types';
 import { apiFetch } from '@/lib/api';
-import { ensureFcmToken, initForegroundFcmListener, removeFcmToken } from '@/lib/fcm';
-import { toast } from 'sonner';
-import { playNotificationSound } from '@/lib/notificationSound';
 
 interface AuthContextType {
   user: User | null;
@@ -32,47 +29,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(initialUser);
   const [booting, setBooting] = useState<boolean>(!initialUser);
 
-  useEffect(() => {
-    let unsub: (() => void) | null = null;
-    if (!user) return;
-    (async () => {
-      try {
-        try { await ensureFcmToken('web'); } catch { /* already logged */ }
-
-        unsub = await initForegroundFcmListener((payload) => {
-          try { void playNotificationSound(); } catch { void 0 }
-
-          const title = payload?.notification?.title || 'Notification';
-          const body = payload?.notification?.body || '';
-          const docId = (payload as any)?.data?.document_id as string | undefined;
-          const msg = body || title;
-
-          toast(msg, {
-            description: body ? title : undefined,
-            action: docId
-              ? {
-                  label: 'Ouvrir',
-                  onClick: () => {
-                    try {
-                      window.location.assign(`/documents/${docId}`);
-                    } catch {
-                      // ignore
-                    }
-                  },
-                }
-              : undefined,
-          });
-        });
-      } catch {
-        // ignore
-      }
-    })();
-
-    return () => {
-      try { unsub?.(); } catch { void 0 }
-    };
-  }, [user]);
-
   const login = async (identifier: string, password: string, remember: boolean): Promise<User | null> => {
     const res = await apiFetch('/api/auth/login', {
       method: 'POST',
@@ -98,17 +54,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (prefs.ui_accent_color) applyAccent(prefs.ui_accent_color);
         }
       } catch { /* ignore */ }
-
-      try {
-        await ensureFcmToken('web');
-      } catch { /* already logged */ }
       return nextUser;
     }
     return null;
   };
 
   const logout = async () => {
-    try { await removeFcmToken(); } catch { /* ignore */ }
     // Clear local state first to avoid blocking the UI
     setUser(null);
     try { sessionStorage.removeItem('auth:user'); } catch { void 0 }
@@ -128,8 +79,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const me = (await res.json()) as User;
           setUser(me);
           try { sessionStorage.setItem('auth:user', JSON.stringify(me)); } catch { void 0 }
-
-          try { await ensureFcmToken('web'); } catch { /* already logged */ }
           // Load and apply enterprise UI preferences (theme & accent)
           try {
             const prefRes = await apiFetch('/api/ui-preferences', { toast: { error: { enabled: false } } });

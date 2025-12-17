@@ -14,6 +14,7 @@ use App\Services\FcmService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\File as FileRule;
@@ -340,6 +341,20 @@ class DocumentController extends Controller
             'size_bytes' => $uploaded->getSize(),
             'created_by' => $user->id,
         ]);
+
+        if (!Cache::has('documents_events_sequence')) {
+            Cache::forever('documents_events_sequence', 0);
+        }
+        Cache::forever('documents_last_event', [
+            'type' => 'document_created',
+            'document_id' => (int) $doc->id,
+            'document_name' => (string) ($doc->name ?: ''),
+            'folder_id' => $doc->folder_id ? (int) $doc->folder_id : null,
+            'service_id' => $doc->service_id ? (int) $doc->service_id : null,
+            'created_by' => (int) $user->id,
+            'created_by_name' => (string) ($user->name ?: ''),
+        ]);
+        Cache::increment('documents_events_sequence');
 
         try {
             $userIds = Employee::where('service_id', $serviceId)
