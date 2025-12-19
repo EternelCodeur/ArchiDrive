@@ -230,8 +230,11 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
 
     let es: EventSource | null = null;
     let retryTimer: any = null;
+    let retryCount = 0;
+    let stopped = false;
 
     const connect = () => {
+      if (stopped) return;
       try {
         es = new EventSource('/api/events/documents');
       } catch {
@@ -257,11 +260,29 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       es.onerror = () => {
         try { es?.close(); } catch { void 0 }
         es = null;
-        if (retryTimer) return;
-        retryTimer = setTimeout(() => {
-          retryTimer = null;
-          connect();
-        }, 1500);
+
+        // If the endpoint is missing/forbidden, avoid tight reconnect loops that can freeze the UI.
+        // EventSource doesn't expose status codes directly; we probe once to decide if we should stop.
+        (async () => {
+          try {
+            const probe = await apiFetch('/api/events/documents', { toast: { error: { enabled: false }, success: { enabled: false } }, timeoutMs: 5000 });
+            if (probe.status === 404 || probe.status === 401 || probe.status === 403) {
+              stopped = true;
+              return;
+            }
+          } catch {
+            // ignore probe errors and continue retry with backoff
+          }
+
+          if (stopped) return;
+          if (retryTimer) return;
+          retryCount += 1;
+          const delay = Math.min(30_000, 1500 * Math.pow(2, Math.min(retryCount, 5)));
+          retryTimer = setTimeout(() => {
+            retryTimer = null;
+            connect();
+          }, delay);
+        })();
       };
     };
 
@@ -272,6 +293,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         try { clearTimeout(retryTimer); } catch { void 0 }
         retryTimer = null;
       }
+      stopped = true;
       try { es?.close(); } catch { void 0 }
       es = null;
     };
@@ -376,9 +398,11 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   }, [hasSearch, selectedDbFolderId]);
   const searchFolderSource = hasSearch ? deepFolders : displaySubfolders;
   const filteredSubfolders = useMemo(() => {
-    if (!hasSearch) return searchFolderSource;
-    return searchFolderSource.filter(f => norm(f.name).includes(q));
-  }, [hasSearch, q, searchFolderSource]);
+    const sharedFolderIds = new Set<number>((sharedFolders ?? []).map(sf => sf.folder_id));
+    const withoutShared = searchFolderSource.filter(f => !sharedFolderIds.has(f.id));
+    if (!hasSearch) return withoutShared;
+    return withoutShared.filter(f => norm(f.name).includes(q));
+  }, [hasSearch, q, searchFolderSource, sharedFolders]);
   const filteredDocuments = useMemo(() => {
     if (!hasSearch) return uiDocuments;
     return uiDocuments.filter(d => norm(d.name).includes(q));

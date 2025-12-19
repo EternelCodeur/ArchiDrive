@@ -39,13 +39,12 @@ const Index = () => {
   useEffect(() => {
     if (typeof currentFolderId !== 'number') return;
     const match = (sharedFolders || []).find(sf => sf.folder_id === currentFolderId);
-    if (match) setExpandedShared(prev => ({ ...prev, [match.id]: true }));
+    if (!match) return;
+    setExpandedShared(prev => {
+      if (typeof prev[match.id] === 'boolean') return prev;
+      return { ...prev, [match.id]: true };
+    });
   }, [currentFolderId, sharedFolders]);
-  useEffect(() => {
-    if (typeof collapseFolderId !== 'number') return;
-    const match = (sharedFolders || []).find(sf => sf.folder_id === collapseFolderId);
-    if (match) setExpandedShared(prev => ({ ...prev, [match.id]: false }));
-  }, [collapseFolderId, sharedFolders]);
 
   const handleFolderClick = async (folderId: number) => {
     // Collapse the previously active folder in the sidebar
@@ -168,12 +167,13 @@ const Index = () => {
                   <div className="mb-0">
                     <div className="mt-2 space-y-1">
                       {sharedFolders.map((sf) => {
-                        const isOpen = Boolean(expandedShared[sf.id]) || currentFolderId === sf.folder_id;
+                        const isActive = currentFolderId === sf.folder_id;
+                        const isOpen = Boolean(expandedShared[sf.id]);
                         return (
                           <div
                             key={sf.id}
                             className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
-                              isOpen ? "bg-blue-100 text-blue-700 font-medium" : "text-slate-100 hover:bg-blue-100 hover:text-blue-700"
+                              (isOpen || isActive) ? "bg-blue-100 text-blue-700 font-medium" : "text-slate-100 hover:bg-blue-100 hover:text-blue-700"
                             }`}
                             onClick={() => {
                               if (isOpen) {

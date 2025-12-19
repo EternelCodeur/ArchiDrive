@@ -83,6 +83,16 @@ const TreeNode = ({ folder, level, onFolderClick, currentFolderId, externalColla
 
 export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId, onCloseTabByFolderId }: FolderTreeProps) => {
   const { user } = useAuth();
+  const { data: currentFolder } = useQuery<FolderType | null>({
+    queryKey: ['folder-by-id', currentFolderId ?? 0],
+    enabled: typeof currentFolderId === 'number',
+    queryFn: async () => {
+      const res = await apiFetch(`/api/folders/${currentFolderId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
   const { data: visibleServices } = useQuery<Service[]>({
     queryKey: ["visible-services", user?.id ?? 0],
     queryFn: async () => {
@@ -93,7 +103,7 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
     staleTime: 60_000,
   });
 
-  const ServiceNode = ({ service }: { service: Service }) => {
+  const ServiceNode = ({ service, currentFolderServiceId }: { service: Service; currentFolderServiceId: number | null }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const { data: roots } = useQuery<FolderType[]>({
       queryKey: ['service-root', service.id],
@@ -105,25 +115,14 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
       staleTime: 60_000,
     });
     const root = (roots ?? [])[0];
-    // Fetch currentFolder to know which service it belongs to
-    const { data: currentFolder } = useQuery<FolderType | null>({
-      queryKey: ['folder-by-id', currentFolderId ?? 0],
-      enabled: typeof currentFolderId === 'number',
-      queryFn: async () => {
-        const res = await apiFetch(`/api/folders/${currentFolderId}`);
-        if (!res.ok) return null;
-        return res.json();
-      },
-      staleTime: 30_000,
-    });
     // We don't render children in the sidebar (service-only level)
     const isActive = typeof root?.id === 'number' && currentFolderId === root.id;
 
     // Auto-sync expansion with current folder's service
     useEffect(() => {
-      const belongsToThisService = (currentFolder?.service_id ?? null) === service.id;
+      const belongsToThisService = (currentFolderServiceId ?? null) === service.id;
       setIsExpanded(belongsToThisService);
-    }, [currentFolder?.service_id, service.id]);
+    }, [currentFolderServiceId, service.id]);
 
     return (
       <div>
@@ -162,7 +161,7 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
   return (
     <div className="space-y-1 py-2">
       {(visibleServices ?? []).map((svc) => (
-        <ServiceNode key={svc.id} service={svc} />
+        <ServiceNode key={svc.id} service={svc} currentFolderServiceId={currentFolder?.service_id ?? null} />
       ))}
     </div>
   );

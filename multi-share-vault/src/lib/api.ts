@@ -1,5 +1,7 @@
 import { toast } from 'sonner';
 
+ const API_BASE_URL = (import.meta as any)?.env?.VITE_API_URL as string | undefined;
+
 export type ApiFetchOptions = RequestInit & {
   toast?: {
     success?: { enabled?: boolean; message?: string };
@@ -8,6 +10,13 @@ export type ApiFetchOptions = RequestInit & {
   };
   timeoutMs?: number;
 };
+
+ function resolveApiInput(input: RequestInfo | URL): RequestInfo | URL {
+   if (!API_BASE_URL) return input;
+   if (typeof input !== 'string') return input;
+   if (!input.startsWith('/')) return input;
+   return new URL(input, API_BASE_URL);
+ }
 
 export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions = {}): Promise<Response> {
   const headers = new Headers(init.headers || {});
@@ -22,7 +31,8 @@ export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions =
   const timeout = timeoutMs ? setTimeout(() => controller!.abort(), timeoutMs) : undefined;
 
   try {
-    const res = await fetch(input, { ...init, headers, credentials: 'include', signal: controller?.signal });
+    const resolvedInput = resolveApiInput(input);
+    const res = await fetch(resolvedInput, { ...init, headers, credentials: 'include', signal: controller?.signal });
 
     // Attempt to build a meaningful message
     const methodMsg: Record<string, string> = {
