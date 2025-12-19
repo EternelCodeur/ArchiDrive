@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Controllers\API\SuperAdminUserController;
 use App\Http\Controllers\API\SuperAdminStorageOverviewController;
 use App\Http\Controllers\API\EnterpriseController;
@@ -23,16 +24,28 @@ Route::get('/health', function () {
 });
 
 Route::get('/config/webtwain', function () {
-    $key = (string) config('services.dwt.product_key', '');
-    return response()->json([
-        'dwtProductKey' => $key,
-    ]);
+    $key = Cache::remember('config:webtwain:dwtProductKey', 300, function () {
+        $fromConfig = (string) config('services.dwt.product_key', '');
+        if (trim($fromConfig) !== '') return $fromConfig;
+
+        $fromEnvDirect = (string) env('DWT_PRODUCT_KEY', '');
+        return trim($fromEnvDirect);
+    });
+
+    return response()
+        ->json([
+            'dwtProductKey' => (string) $key,
+        ])
+        ->header('Cache-Control', 'public, max-age=300');
 });
 
 Route::post('/auth/login', [AuthController::class, 'login']);
-Route::middleware('jwt')->group(function () {
+Route::middleware(['jwt', 'throttle:auth'])->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+});
+
+Route::middleware(['jwt', 'throttle:api'])->group(function () {
 
     // FCM token registration
     Route::post('/fcm/token', [FcmTokenController::class, 'store']);

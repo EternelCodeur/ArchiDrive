@@ -1112,10 +1112,22 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         onClose={() => setIsScannerModalOpen(false)}
         folderId={typeof selectedDbFolderId === 'number' ? selectedDbFolderId : null}
         serviceId={typeof effectiveSelected?.service_id === 'number' ? (effectiveSelected.service_id as number) : null}
-        onUploaded={async () => {
-          if (typeof selectedDbFolderId === 'number') {
-            await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
+        onUploaded={async (createdDoc?: any) => {
+          if (typeof selectedDbFolderId !== 'number') return;
+
+          const key = ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] as const;
+
+          // Optimistic: push the created doc into the current cache so it appears instantly.
+          if (createdDoc && typeof createdDoc.id === 'number') {
+            queryClient.setQueryData(key, (prev: any) => {
+              const arr = Array.isArray(prev) ? prev : [];
+              if (arr.some((d: any) => Number(d?.id) === Number(createdDoc.id))) return arr;
+              return [createdDoc, ...arr];
+            });
           }
+
+          await queryClient.invalidateQueries({ queryKey: key });
+          await queryClient.refetchQueries({ queryKey: key });
         }}
       />
 

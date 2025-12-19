@@ -115,6 +115,11 @@ class DocumentController extends Controller
         $serviceId = $request->query('service_id');
         $countOnly = $request->query('count_only');
 
+        $page = (int) ($request->query('page') ?? 0);
+        $perPage = (int) ($request->query('per_page') ?? 0);
+        if ($perPage <= 0) $perPage = 200;
+        if ($perPage > 500) $perPage = 500;
+
         // Permission context
         $ctxServiceId = null;
         if ($folderId) {
@@ -170,10 +175,27 @@ class DocumentController extends Controller
             return response()->json(['count' => $query->count()]);
         }
 
-        $docs = $query->orderByDesc('id')->get()->map(function ($doc) {
-            $arr = $doc->toArray();
-            $arr['created_by_name'] = $doc->creator?->name;
-            return $arr;
+        $cacheKey = 'docs:index:' . ($user->id ?? 0)
+            . ':f=' . ($folderId ?? '')
+            . ':s=' . ($serviceId ?? '')
+            . ':p=' . $page
+            . ':pp=' . $perPage;
+
+        $docs = Cache::remember($cacheKey, 10, function () use ($query, $page, $perPage) {
+            $q = $query->orderByDesc('id');
+
+            if ($page > 0) {
+                $offset = max(0, ($page - 1) * $perPage);
+                $q->skip($offset)->take($perPage);
+            } else {
+                $q->take($perPage);
+            }
+
+            return $q->get()->map(function ($doc) {
+                $arr = $doc->toArray();
+                $arr['created_by_name'] = $doc->creator?->name;
+                return $arr;
+            })->values();
         });
 
         return response()->json($docs);
@@ -253,10 +275,17 @@ class DocumentController extends Controller
             }
         }
 
-        $docs = $query->orderByDesc('id')->limit($limit)->get()->map(function ($doc) {
-            $arr = $doc->toArray();
-            $arr['created_by_name'] = $doc->creator?->name;
-            return $arr;
+        $cacheKey = 'docs:recent:' . ($user->id ?? 0)
+            . ':f=' . ($folderId ?? '')
+            . ':limit=' . $limit
+            . ':ctx=' . ($ctxServiceId ?? '');
+
+        $docs = Cache::remember($cacheKey, 10, function () use ($query, $limit) {
+            return $query->orderByDesc('id')->limit($limit)->get()->map(function ($doc) {
+                $arr = $doc->toArray();
+                $arr['created_by_name'] = $doc->creator?->name;
+                return $arr;
+            })->values();
         });
 
         return response()->json($docs);

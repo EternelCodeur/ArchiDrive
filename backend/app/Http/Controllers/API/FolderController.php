@@ -12,6 +12,7 @@ use App\Models\SharedFolder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 class FolderController extends Controller
@@ -122,6 +123,10 @@ class FolderController extends Controller
         $serviceId = $request->query('service_id');
         $parentId = $request->query('parent_id');
 
+        $limit = (int) ($request->query('limit') ?? 0);
+        if ($limit <= 0) $limit = 500;
+        if ($limit > 1000) $limit = 1000;
+
         if ($serviceId !== null) {
             $service = Service::find($serviceId);
             if (!$service) return response()->json([]);
@@ -158,7 +163,13 @@ class FolderController extends Controller
                 } catch (\Throwable $e) { /* ignore */ }
                 $roots = collect([$root]);
             }
-            return response()->json($roots->values());
+
+            $cacheKey = 'folders:roots:' . ($user->id ?? 0) . ':svc=' . (string) $serviceId;
+            $data = Cache::remember($cacheKey, 10, function () use ($roots) {
+                return $roots->values();
+            });
+
+            return response()->json($data);
         }
 
         if ($parentId !== null) {
@@ -187,8 +198,12 @@ class FolderController extends Controller
                     }
                 }
             }
-            $children = Folder::where('parent_id', $parentId)->get();
-            return response()->json($children->values());
+            $cacheKey = 'folders:children:' . ($user->id ?? 0) . ':parent=' . (string) $parentId . ':limit=' . $limit;
+            $children = Cache::remember($cacheKey, 10, function () use ($parentId, $limit) {
+                return Folder::where('parent_id', $parentId)->orderBy('id')->limit($limit)->get()->values();
+            });
+
+            return response()->json($children);
         }
 
         // default: list nothing

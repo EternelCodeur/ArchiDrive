@@ -24,31 +24,34 @@ class AdminServiceController extends Controller
             return response()->json([], Response::HTTP_UNAUTHORIZED);
         }
 
-        if ($user->role === 'super_admin') {
-            return response()->json(Service::all());
-        }
-
-        if ($user->role === 'admin') {
-            if (!$user->enterprise_id) return response()->json([]);
-            $services = Service::where('enterprise_id', $user->enterprise_id)->get();
-            return response()->json($services);
-        }
-
-        if ($user->role === 'agent') {
-            // Special right: view all services within the same enterprise
-            if (!empty($user->enterprise_id) && (bool)($user->can_view_all_services ?? false) === true) {
-                $services = Service::where('enterprise_id', $user->enterprise_id)->get();
-                return response()->json($services);
+        $cacheKey = 'services:visible:' . ($user->id ?? 0) . ':ent=' . (string) ($user->enterprise_id ?? 0) . ':role=' . (string) ($user->role ?? '');
+        $services = Cache::remember($cacheKey, 30, function () use ($user) {
+            if ($user->role === 'super_admin') {
+                return Service::all();
             }
-            $emp = Employee::where('user_id', $user->id)->first();
-            if ($emp && $emp->service_id) {
-                $svc = Service::where('id', $emp->service_id)->first();
-                return response()->json($svc ? [$svc] : []);
-            }
-            return response()->json([]);
-        }
 
-        return response()->json([]);
+            if ($user->role === 'admin') {
+                if (!$user->enterprise_id) return collect([]);
+                return Service::where('enterprise_id', $user->enterprise_id)->get();
+            }
+
+            if ($user->role === 'agent') {
+                // Special right: view all services within the same enterprise
+                if (!empty($user->enterprise_id) && (bool)($user->can_view_all_services ?? false) === true) {
+                    return Service::where('enterprise_id', $user->enterprise_id)->get();
+                }
+                $emp = Employee::where('user_id', $user->id)->first();
+                if ($emp && $emp->service_id) {
+                    $svc = Service::where('id', $emp->service_id)->first();
+                    return $svc ? collect([$svc]) : collect([]);
+                }
+                return collect([]);
+            }
+
+            return collect([]);
+        });
+
+        return response()->json($services->values());
     }
     public function index(Request $request)
     {

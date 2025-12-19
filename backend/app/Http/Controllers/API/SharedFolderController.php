@@ -11,6 +11,7 @@ use App\Models\Document;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Enterprise;
 use Illuminate\Support\Str;
@@ -78,34 +79,38 @@ class SharedFolderController extends Controller
             return response()->json([]);
         }
 
-        $query = SharedFolder::with(['folder:id,name,service_id,parent_id', 'services:id'])
-            ->where('enterprise_id', $user->enterprise_id);
+        $cacheKey = 'shared-folders:visible:' . ($user->id ?? 0) . ':ent=' . (string) $user->enterprise_id;
 
-        if ($user->role === 'agent') {
-            $emp = Employee::where('user_id', $user->id)->first();
-            if (!$emp) {
-                return response()->json([]);
+        $list = Cache::remember($cacheKey, 10, function () use ($user) {
+            $query = SharedFolder::with(['folder:id,name,service_id,parent_id', 'services:id'])
+                ->where('enterprise_id', $user->enterprise_id);
+
+            if ($user->role === 'agent') {
+                $emp = Employee::where('user_id', $user->id)->first();
+                if (!$emp) {
+                    return collect([]);
+                }
+                $query->where(function ($q) use ($emp) {
+                    $q->where('visibility', 'enterprise')
+                      ->orWhere(function ($q2) use ($emp) {
+                          $q2->where('visibility', 'services')
+                             ->whereHas('services', function ($qs) use ($emp) {
+                                 $qs->where('services.id', $emp->service_id);
+                             });
+                      });
+                });
             }
-            $query->where(function ($q) use ($emp) {
-                $q->where('visibility', 'enterprise')
-                  ->orWhere(function ($q2) use ($emp) {
-                      $q2->where('visibility', 'services')
-                         ->whereHas('services', function ($qs) use ($emp) {
-                             $qs->where('services.id', $emp->service_id);
-                         });
-                  });
-            });
-        }
 
-        $list = $query->orderBy('id', 'desc')->get()->map(function (SharedFolder $sf) {
-            return [
-                'id' => $sf->id,
-                'name' => $sf->name,
-                'folder_id' => $sf->folder_id,
-                'visibility' => $sf->visibility,
-                'services' => $sf->visibility === 'services' ? $sf->services->pluck('id')->values()->all() : [],
-            ];
-        })->values();
+            return $query->orderBy('id', 'desc')->get()->map(function (SharedFolder $sf) {
+                return [
+                    'id' => $sf->id,
+                    'name' => $sf->name,
+                    'folder_id' => $sf->folder_id,
+                    'visibility' => $sf->visibility,
+                    'services' => $sf->visibility === 'services' ? $sf->services->pluck('id')->values()->all() : [],
+                ];
+            })->values();
+        });
 
         return response()->json($list);
     }

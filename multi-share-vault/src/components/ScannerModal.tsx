@@ -12,12 +12,22 @@ type ScannedPage = {
   bufferIndex?: number;
 };
 
+function revokeBlobUrlIfNeeded(url: string) {
+  try {
+    if (typeof url === 'string' && url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 type ScannerModalProps = {
   isOpen: boolean;
   onClose: () => void;
   folderId?: number | null;
   serviceId?: number | null;
-  onUploaded?: () => void;
+  onUploaded?: (createdDoc?: any) => void | Promise<void>;
 };
 
 function normalizeDataUrlFromDwtBase64(raw: string, fallbackMime = "image/png"): string {
@@ -122,7 +132,10 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
     setRuntimeProductKey(undefined);
     setSources([]);
     setSelectedSourceIndex(null);
-    setPages([]);
+    setPages((prev) => {
+      prev.forEach((p) => revokeBlobUrlIfNeeded(p.dataUrl));
+      return [];
+    });
     setScanLoading(false);
     setDocumentName("Document scanné");
     initAttemptedRef.current = false;
@@ -322,7 +335,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       const deviceConfiguration: any = {
         IfShowUI: false,
         PixelType: pixelTypeEnum?.TWPT_RGB,
-        Resolution: 300,
+        Resolution: 200,
         IfFeederEnabled: true,
         IfDuplexEnabled: false,
         IfDisableSourceAfterAcquire: true,
@@ -384,11 +397,9 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       const afterCount = typeof dwt.HowManyImagesInBuffer === "number" ? (dwt.HowManyImagesInBuffer as number) : 0;
       if (afterCount <= beforeCount) return true;
 
-      const imageType = (Dynamsoft as any)?.DWT?.EnumDWT_ImageType?.IT_PNG;
-      if (!imageType || typeof dwt.ConvertToBase64 !== "function") {
-        toast.message("Scan OK, mais conversion miniatures non configurée (fallback mock)");
-        return false;
-      }
+      const imageTypeEnum = (Dynamsoft as any)?.DWT?.EnumDWT_ImageType;
+      const jpgType = imageTypeEnum?.IT_JPG;
+      const pngType = imageTypeEnum?.IT_PNG;
 
       const newIndices: number[] = [];
       for (let i = beforeCount; i < afterCount; i += 1) newIndices.push(i);
@@ -396,32 +407,37 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       const thumbs: ScannedPage[] = [];
       for (let i = 0; i < newIndices.length; i += 1) {
         const idx = newIndices[i];
-        const base64Raw: any = await new Promise((resolve, reject) => {
-          dwt.ConvertToBase64(
-            [idx],
-            imageType,
-            (result: any) => resolve(result),
-            (error: any) => reject(error),
-          );
-        });
-        const base64 = extractBase64StringFromDwt(base64Raw);
-        if (!base64) {
-          // eslint-disable-next-line no-console
-          console.warn("WebTWAIN ConvertToBase64 returned non-string", base64Raw);
+        let previewUrl = "";
+
+        if (typeof dwt.ConvertToBlob === "function" && (jpgType || pngType)) {
+          const typeToUse = jpgType || pngType;
+          const blob: Blob = await new Promise((resolve, reject) => {
+            dwt.ConvertToBlob(
+              [idx],
+              typeToUse,
+              (result: Blob) => resolve(result),
+              (errorCode: any, errorString: any) => reject(new Error(String(errorString || errorCode))),
+            );
+          });
+          previewUrl = URL.createObjectURL(blob);
+        } else if (typeof dwt.ConvertToBase64 === "function" && (pngType || jpgType)) {
+          const typeToUse = pngType || jpgType;
+          const base64Raw: any = await new Promise((resolve, reject) => {
+            dwt.ConvertToBase64(
+              [idx],
+              typeToUse,
+              (result: any) => resolve(result),
+              (error: any) => reject(error),
+            );
+          });
+          const base64 = extractBase64StringFromDwt(base64Raw);
+          const fallbackMime = typeToUse === jpgType ? "image/jpeg" : "image/png";
+          previewUrl = normalizeDataUrlFromDwtBase64(base64, fallbackMime);
         }
 
-        const dataUrl = normalizeDataUrlFromDwtBase64(base64, "image/png");
-        if (!dataUrl) {
-          thumbs.push({
-            id: Date.now() + i,
-            dataUrl: createMockPageDataUrl(i + 1),
-            bufferIndex: idx,
-          });
-          continue;
-        }
         thumbs.push({
           id: Date.now() + i,
-          dataUrl,
+          dataUrl: previewUrl || createMockPageDataUrl(i + 1),
           bufferIndex: idx,
         });
       }
@@ -462,7 +478,11 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
   };
 
   const removePage = (id: number) => {
-    setPages((prev) => prev.filter((p) => p.id !== id));
+    setPages((prev) => {
+      const toRemove = prev.find((p) => p.id === id);
+      if (toRemove) revokeBlobUrlIfNeeded(toRemove.dataUrl);
+      return prev.filter((p) => p.id !== id);
+    });
   };
 
   const exportSelectedToBlob = async (): Promise<{ blob: Blob; mime: string; ext: string } | null> => {
@@ -530,8 +550,15 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       });
       if (!res.ok) return;
 
+      let created: any = null;
+      try {
+        created = await res.clone().json();
+      } catch {
+        created = null;
+      }
+
       toast.success(`Enregistré: ${name} (${pages.length} page(s))`);
-      onUploaded?.();
+      await onUploaded?.(created ?? undefined);
       onClose();
     } catch (e: any) {
       toast.error(e?.message || "Échec de l’enregistrement");
