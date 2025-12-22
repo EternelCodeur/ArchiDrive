@@ -111,6 +111,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
   const initAttemptedRef = useRef(false);
 
   const productKey = import.meta.env.VITE_DWT_PRODUCT_KEY as string | undefined;
+  const dwtResourcesPath = (import.meta.env.VITE_DWT_RESOURCES_PATH as string | undefined) || "/dwt-resources";
   const effectiveProductKey = (runtimeProductKey && runtimeProductKey.trim().length > 0)
     ? runtimeProductKey
     : productKey;
@@ -162,10 +163,10 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
   useEffect(() => {
     if (!isOpen) return;
     // Quick check: are static DWT resources actually reachable?
-    fetch(`/dwt-resources/dynamsoft.webtwain.min.mjs?ts=${Date.now()}`, { method: 'GET' })
+    fetch(`${dwtResourcesPath.replace(/\/$/, '')}/dynamsoft.webtwain.min.mjs?ts=${Date.now()}`, { method: 'GET' })
       .then((r) => setResourcesOk(r.ok))
       .catch(() => setResourcesOk(false));
-  }, [isOpen]);
+  }, [dwtResourcesPath, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -201,7 +202,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
     }
 
     (Dynamsoft as any).DWT.ProductKey = effectiveProductKey;
-    (Dynamsoft as any).DWT.ResourcesPath = "/dwt-resources";
+    (Dynamsoft as any).DWT.ResourcesPath = dwtResourcesPath;
     (Dynamsoft as any).DWT.IfCheckCORS = true;
     (Dynamsoft as any).DWT.Containers = [
       {
