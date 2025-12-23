@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
 
   const apiUrl = env.VITE_API_PROXY_TARGET || (mode === "development" ? "http://127.0.0.1:8000" : "https://www.api.archi-drive.ga");
   return {
+    base: "/",
     server: {
       host: "::",
       port: 8080,
