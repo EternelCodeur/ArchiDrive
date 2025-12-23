@@ -20,7 +20,10 @@ use App\Http\Controllers\API\FcmTokenController;
 use App\Http\Controllers\API\DocumentController;
 
 Route::get('/health', function () {
-    return response()->json(['status' => 'OK']);
+    return response()->json([
+        'status' => 'ok',
+        'time' => now()
+    ]);
 });
 
 Route::get('/config/webtwain', function () {
