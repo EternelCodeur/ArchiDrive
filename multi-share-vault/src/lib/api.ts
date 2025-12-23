@@ -1,23 +1,7 @@
 import { toast } from 'sonner';
 
- const RAW_ENV_API_BASE_URL = (import.meta as any)?.env?.VITE_API_URL as string | undefined;
- const ENV_API_BASE_URL = (RAW_ENV_API_BASE_URL || '').trim() || undefined;
-
- function guessProdApiBaseUrl(): string {
-  try {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-
-    // If you're on a subdomain like www.archi-drive.ga or archi-drive.ga,
-    // assume the API is on api.<root>.
-    const root = hostname.replace(/^www\./, '');
-    return `${protocol}//api.${root}`;
-  } catch {
-    return 'https://api.archi-drive.ga';
-  }
- }
-
- const API_BASE_URL = ENV_API_BASE_URL || ((import.meta as any)?.env?.PROD ? 'https://api.archi-drive.ga' : undefined);
+// HARDCODED: Always use the production API URL
+const API_BASE_URL = 'https://api.archi-drive.ga';
 
 export type ApiFetchOptions = RequestInit & {
   toast?: {
