@@ -223,6 +223,8 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   });
 
   useEffect(() => {
+    // SSE disabled - endpoint not available on production API
+    return;
     if (import.meta.env.DEV) return;
     if (!user) return;
     if (typeof window === 'undefined') return;
