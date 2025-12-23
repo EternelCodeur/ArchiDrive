@@ -202,7 +202,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     staleTime: 10_000,
     // In dev, php artisan serve uses PHP's built-in server which doesn't handle long-lived SSE well.
     // Poll instead to keep the UI responsive.
-    refetchInterval: import.meta.env.DEV ? 2500 : false,
+    refetchInterval: import.meta.env.DEV ? 10_000 : false,
   });
   // Map backend fields to UI fields (size human-readable, type from mime)
   const uiDocuments = serverDocuments.map((doc) => {

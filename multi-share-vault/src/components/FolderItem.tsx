@@ -40,7 +40,7 @@ export const FolderItem = ({ folder, onClick, onRename, onDelete, selectionMode,
       </div>
       
       <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-sm text-foreground truncate">{folder.name}</h3>
+        <h3 className="font-medium text-sm text-foreground whitespace-normal break-words leading-snug">{folder.name}</h3>
       </div>
 
       {/* Menu actions dossier (renommer / supprimer) */}
