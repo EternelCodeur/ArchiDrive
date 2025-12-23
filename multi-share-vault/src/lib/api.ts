@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 
- const ENV_API_BASE_URL = (import.meta as any)?.env?.VITE_API_URL as string | undefined;
+ const RAW_ENV_API_BASE_URL = (import.meta as any)?.env?.VITE_API_URL as string | undefined;
+ const ENV_API_BASE_URL = (RAW_ENV_API_BASE_URL || '').trim() || undefined;
 
  function guessProdApiBaseUrl(): string {
   try {
@@ -17,7 +18,7 @@ import { toast } from 'sonner';
  }
 
  const API_BASE_URL =
-  ENV_API_BASE_URL || ((import.meta as any)?.env?.PROD ? guessProdApiBaseUrl() : undefined);
+  ENV_API_BASE_URL || ((import.meta as any)?.env?.PROD ? 'https://api.archi-drive.ga' : undefined);
 
 export type ApiFetchOptions = RequestInit & {
   toast?: {
