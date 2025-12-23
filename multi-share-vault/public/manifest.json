@@ -1,9 +1,0 @@
-{
-  "name": "Archi Drive",
-  "short_name": "ArchiDrive",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
-  "gcm_sender_id": "103953800507"
-}

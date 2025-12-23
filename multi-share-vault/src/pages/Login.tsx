@@ -80,7 +80,7 @@ const Login = () => {
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-white to-blue-50 p-4">
       <div className="mx-auto w-full max-w-6xl min-h-[calc(100vh-2rem)] grid grid-cols-1 lg:grid-cols-2 gap-0 items-stretch rounded-2xl overflow-hidden border bg-white/60 shadow-xl">
-        <div className="relative bg-gradient-to-br from-white via-slate-50 to-blue-50 p-8 flex flex-col justify-center">
+        <div className="hidden lg:flex relative bg-gradient-to-br from-white via-slate-50 to-blue-50 p-8 flex-col justify-center">
           <button
             type="button"
             onClick={goPrev}

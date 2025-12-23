@@ -17,8 +17,7 @@ import { toast } from 'sonner';
   }
  }
 
- const API_BASE_URL =
-  ENV_API_BASE_URL || ((import.meta as any)?.env?.PROD ? 'https://api.archi-drive.ga' : undefined);
+ const API_BASE_URL = ENV_API_BASE_URL || ((import.meta as any)?.env?.PROD ? 'https://api.archi-drive.ga' : undefined);
 
 export type ApiFetchOptions = RequestInit & {
   toast?: {

@@ -43,11 +43,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         const text = await res.text();
         throw new Error(
-          `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, status: ${res.status}, content-type: ${ct || 'inconnu'}). Début: ${text.slice(0, 200)}`
+          `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, redirected: ${res.redirected ? 'true' : 'false'}, status: ${res.status}, content-type: ${ct || 'inconnu'}). Début: ${text.slice(0, 200)}`
         );
       } catch {
         throw new Error(
-          `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, status: ${res.status}, content-type: ${ct || 'inconnu'}).`
+          `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, redirected: ${res.redirected ? 'true' : 'false'}, status: ${res.status}, content-type: ${ct || 'inconnu'}).`
         );
       }
     }
@@ -94,11 +94,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             try {
               const text = await res.text();
               throw new Error(
-                `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, status: ${res.status}, content-type: ${ct || 'inconnu'}). Début: ${text.slice(0, 200)}`
+                `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, redirected: ${res.redirected ? 'true' : 'false'}, status: ${res.status}, content-type: ${ct || 'inconnu'}). Début: ${text.slice(0, 200)}`
               );
             } catch {
               throw new Error(
-                `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, status: ${res.status}, content-type: ${ct || 'inconnu'}).`
+                `Réponse non-JSON reçue depuis l'API (url: ${res.url || 'inconnue'}, redirected: ${res.redirected ? 'true' : 'false'}, status: ${res.status}, content-type: ${ct || 'inconnu'}).`
               );
             }
           }
