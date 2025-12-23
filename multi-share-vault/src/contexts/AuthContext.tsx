@@ -38,6 +38,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!res.ok) {
       return null;
     }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      try {
+        const text = await res.text();
+        throw new Error(`Réponse non-JSON reçue depuis l'API (content-type: ${ct || 'inconnu'}). Début: ${text.slice(0, 80)}`);
+      } catch {
+        throw new Error(`Réponse non-JSON reçue depuis l'API (content-type: ${ct || 'inconnu'}).`);
+      }
+    }
     const data = await res.json();
     const nextUser: User | null = data?.user ?? null;
     if (nextUser) {
@@ -76,6 +85,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         const res = await apiFetch('/api/auth/me', { toast: { error: { enabled: false } } });
         if (res.ok) {
+          const ct = res.headers.get('content-type') || '';
+          if (!ct.includes('application/json')) {
+            try {
+              const text = await res.text();
+              throw new Error(`Réponse non-JSON reçue depuis l'API (content-type: ${ct || 'inconnu'}). Début: ${text.slice(0, 80)}`);
+            } catch {
+              throw new Error(`Réponse non-JSON reçue depuis l'API (content-type: ${ct || 'inconnu'}).`);
+            }
+          }
           const me = (await res.json()) as User;
           setUser(me);
           try { sessionStorage.setItem('auth:user', JSON.stringify(me)); } catch { void 0 }
