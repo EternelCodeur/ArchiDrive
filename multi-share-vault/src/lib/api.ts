@@ -12,7 +12,7 @@ import { toast } from 'sonner';
     const root = hostname.replace(/^www\./, '');
     return `${protocol}//api.${root}`;
   } catch {
-    return 'https://www.api.archi-drive.ga';
+    return 'https://api.archi-drive.ga';
   }
  }
 

@@ -6,7 +6,6 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-        env('FRONTEND_URL', 'https://www.archi-drive.ga'),
         'https://archi-drive.ga',
         'https://www.archi-drive.ga',
     ],
