@@ -38,6 +38,7 @@ export type ApiFetchOptions = RequestInit & {
 export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions = {}): Promise<Response> {
   const headers = new Headers(init.headers || {});
   const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   if (!headers.has('Content-Type') && init.body && !isFormData) headers.set('Content-Type', 'application/json');
   const method = (init.method || 'GET').toUpperCase();
   const isMutation = method !== 'GET';
