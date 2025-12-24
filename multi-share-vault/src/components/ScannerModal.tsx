@@ -513,7 +513,7 @@ export const ScannerModal = ({ isOpen, onClose, folderId, serviceId, onUploaded 
       );
     });
 
-    if (pdfType) return { blob, mime: "application/pdf", ext: "pdf" };
+    if (typeToUse === pdfType) return { blob, mime: "application/pdf", ext: "pdf" };
     return { blob, mime: "image/png", ext: "png" };
   };
 

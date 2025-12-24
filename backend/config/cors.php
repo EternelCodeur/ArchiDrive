@@ -8,6 +8,7 @@ return [
     'allowed_origins' => [
         'https://archi-drive.ga',
         'https://www.archi-drive.ga',
+        'http://127.0.0.1:8080',
     ],
 
     'allowed_origins_patterns' => [],

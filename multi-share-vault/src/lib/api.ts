@@ -1,7 +1,19 @@
 import { toast } from 'sonner';
 
-// HARDCODED: Always use the production API URL
-const API_BASE_URL = 'https://api.archi-drive.ga';
+const API_BASE_URL: string = (() => {
+  try {
+    const env = (import.meta as any)?.env as Record<string, any> | undefined;
+    const isDev = Boolean(env?.DEV);
+    if (isDev) return '';
+    const fromEnv = (env?.VITE_API_BASE_URL as string | undefined)
+      || (env?.VITE_API_URL as string | undefined)
+      || '';
+    if (fromEnv && String(fromEnv).trim().length > 0) return String(fromEnv).trim();
+    return 'https://api.archi-drive.ga';
+  } catch {
+    return 'https://api.archi-drive.ga';
+  }
+})();
 
 export type ApiFetchOptions = RequestInit & {
   toast?: {

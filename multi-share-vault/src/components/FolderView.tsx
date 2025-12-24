@@ -627,7 +627,6 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
 
       if (succeeded > 0) {
         await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
-        await queryClient.refetchQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
       }
       const failed = files.length - succeeded;
       if (failed === 0) {
@@ -1059,6 +1058,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       <input
         ref={fileInputRef}
         type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain"
         multiple
         className="hidden"
         onChange={handleFileChange}
@@ -1127,9 +1127,6 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
               return [createdDoc, ...arr];
             });
           }
-
-          await queryClient.invalidateQueries({ queryKey: key });
-          await queryClient.refetchQueries({ queryKey: key });
         }}
       />
 
