@@ -31,6 +31,12 @@ export type ApiFetchOptions = RequestInit & {
    return new URL(input, API_BASE_URL);
  }
 
+export function resolveApiUrl(path: string): string {
+  const resolved = resolveApiInput(path);
+  if (typeof resolved === 'string') return resolved;
+  return resolved.toString();
+}
+
 export async function apiFetch(input: RequestInfo | URL, init: ApiFetchOptions = {}): Promise<Response> {
   const headers = new Headers(init.headers || {});
   const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;

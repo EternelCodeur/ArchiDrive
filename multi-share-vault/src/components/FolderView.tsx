@@ -13,7 +13,7 @@ import { getFoldersByParent, getDocumentsByFolder, getFolderPath, getFolderById,
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, resolveApiUrl } from "@/lib/api";
 import type { Service, Folder as FolderDto } from "@/types";
 
 type BackendDocument = {
@@ -322,7 +322,12 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
           const meta = await res.json();
           const mime = meta?.mime_type as string | null;
           setPreviewMime(mime);
-          const fileRes = await fetch(`/api/documents/${previewDoc.id}/download?ts=${Date.now()}` as RequestInfo, { credentials: 'include', cache: 'no-store' as RequestCache });
+          const fileRes = await apiFetch(resolveApiUrl(`/api/documents/${previewDoc.id}/download?ts=${Date.now()}`), {
+            method: 'GET',
+            headers: { Accept: '*/*' },
+            toast: { error: { enabled: false }, success: { enabled: false } },
+            cache: 'no-store' as RequestCache,
+          });
           if (fileRes.ok) {
             if (mime && mime.startsWith('text/')) {
               const txt = await fileRes.text();
@@ -627,6 +632,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
 
       if (succeeded > 0) {
         await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
+        await queryClient.refetchQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
       }
       const failed = files.length - succeeded;
       if (failed === 0) {
@@ -664,7 +670,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
 
   const handleDownloadDocument = (id: number, name: string) => {
     const a = document.createElement('a');
-    a.href = `/api/documents/${id}/download`;
+    a.href = resolveApiUrl(`/api/documents/${id}/download`);
     a.download = name;
     document.body.appendChild(a);
     a.click();
@@ -1058,7 +1064,6 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain"
         multiple
         className="hidden"
         onChange={handleFileChange}
@@ -1127,6 +1132,9 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
               return [createdDoc, ...arr];
             });
           }
+
+          await queryClient.invalidateQueries({ queryKey: key });
+          await queryClient.refetchQueries({ queryKey: key });
         }}
       />
 

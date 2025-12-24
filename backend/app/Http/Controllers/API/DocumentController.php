@@ -21,6 +21,12 @@ use Illuminate\Validation\Rules\File as FileRule;
 
 class DocumentController extends Controller
 {
+    private function documentsDisk(): string
+    {
+        $disk = (string) (env('DOCUMENTS_DISK', 'local'));
+        return $disk !== '' ? $disk : 'local';
+    }
+
     private function buildBaseEnterprisePath(int $serviceId): string
     {
         $base = 'enterprises/entreprise';
@@ -354,10 +360,12 @@ class DocumentController extends Controller
         $dirRel = $this->buildFolderDirPath($folder, $service);
         $fullDir = $base . '/' . $dirRel;
 
+        $disk = $this->documentsDisk();
+
         // Ensure directory exists
-        Storage::disk('local')->makeDirectory($fullDir);
+        Storage::disk($disk)->makeDirectory($fullDir);
         // Store file
-        Storage::disk('local')->putFileAs($fullDir, $uploaded, $finalName);
+        Storage::disk($disk)->putFileAs($fullDir, $uploaded, $finalName);
         $relPath = $fullDir . '/' . $finalName;
 
         $doc = Document::create([
@@ -599,14 +607,16 @@ class DocumentController extends Controller
             }
         }
 
-        if (!$document->file_path || !Storage::disk('local')->exists($document->file_path)) {
+        $disk = $this->documentsDisk();
+
+        if (!$document->file_path || !Storage::disk($disk)->exists($document->file_path)) {
             return response()->json(['message' => 'File not found'], 404);
         }
         // Resolve absolute path in a cross-platform way
         $fullPath = null;
         try {
-            if (method_exists(Storage::disk('local'), 'path')) {
-                $fullPath = Storage::disk('local')->path($document->file_path);
+            if (method_exists(Storage::disk($disk), 'path')) {
+                $fullPath = Storage::disk($disk)->path($document->file_path);
             }
         } catch (\Throwable $e) { $fullPath = null; }
 
@@ -621,7 +631,7 @@ class DocumentController extends Controller
         }
 
         // Fallback: stream from storage (works even if absolute path resolution fails on Windows)
-        $stream = Storage::disk('local')->readStream($document->file_path);
+        $stream = Storage::disk($disk)->readStream($document->file_path);
         if ($stream === false) {
             return response()->json(['message' => 'File not found'], 404);
         }

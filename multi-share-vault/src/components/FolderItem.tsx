@@ -52,7 +52,7 @@ export const FolderItem = ({ folder, onClick, onRename, onDelete, selectionMode,
       >
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button type="button" className="p-1 rounded-full hover:bg-accent transition-colors">
+            <button className="p-1 rounded-full hover:bg-accent transition-colors">
               <MoreVertical className="w-4 h-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>

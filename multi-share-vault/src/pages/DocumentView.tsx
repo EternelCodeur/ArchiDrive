@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, resolveApiUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 type DocumentMeta = {
@@ -53,7 +53,12 @@ const DocumentView = () => {
         const mt = (m?.mime_type ?? null) as string | null;
         setMime(mt);
 
-        const fileRes = await fetch(`/api/documents/${docId}/download?ts=${Date.now()}` as RequestInfo, { credentials: 'include', cache: 'no-store' as RequestCache });
+        const fileRes = await apiFetch(resolveApiUrl(`/api/documents/${docId}/download?ts=${Date.now()}`), {
+          method: 'GET',
+          headers: { Accept: '*/*' },
+          toast: { error: { enabled: false }, success: { enabled: false } },
+          cache: 'no-store' as RequestCache,
+        });
         if (!fileRes.ok) return;
 
         if (mt && mt.startsWith('text/')) {
@@ -108,7 +113,7 @@ const DocumentView = () => {
             type="button"
             onClick={() => {
               const a = document.createElement('a');
-              a.href = `/api/documents/${docId}/download`;
+              a.href = resolveApiUrl(`/api/documents/${docId}/download`);
               a.download = meta?.name ?? `document-${docId}`;
               document.body.appendChild(a);
               a.click();
