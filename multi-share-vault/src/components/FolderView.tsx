@@ -601,7 +601,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
 
       const uploadFile = (file: File) => new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/documents');
+        xhr.open('POST', resolveApiUrl('/api/documents'));
         xhr.withCredentials = true;
         xhr.responseType = 'json';
         xhr.upload.onprogress = (ev: ProgressEvent) => {
@@ -616,7 +616,12 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
             recomputeProgress();
             resolve();
           } else {
-            reject(new Error('upload_failed'));
+            const resp: any = xhr.response;
+            const msg = (resp && (resp.message || resp.error))
+              ? String(resp.message || resp.error)
+              : `Erreur ${xhr.status}`;
+            toast.error(msg);
+            reject(new Error(msg));
           }
         };
         xhr.onerror = () => reject(new Error('network_error'));
