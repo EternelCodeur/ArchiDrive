@@ -204,6 +204,20 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
     // Poll instead to keep the UI responsive.
     refetchInterval: import.meta.env.DEV ? 10_000 : false,
   });
+
+  const refreshAfterDocumentsMutation = async (folderIdToRefresh?: number | null) => {
+    const fid = typeof folderIdToRefresh === 'number' ? folderIdToRefresh : (typeof selectedDbFolderId === 'number' ? selectedDbFolderId : null);
+    try {
+      if (typeof fid === 'number') {
+        await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', fid, user?.id ?? 0] });
+        await queryClient.refetchQueries({ queryKey: ['documents-by-folder', fid, user?.id ?? 0] });
+      }
+      // Header recent uploads
+      await queryClient.invalidateQueries({ queryKey: ['recent-uploads'] });
+      // Side counters (dashboard)
+      await queryClient.invalidateQueries({ queryKey: ['documents-count'] });
+    } catch { void 0 }
+  };
   // Map backend fields to UI fields (size human-readable, type from mime)
   const uiDocuments = serverDocuments.map((doc) => {
     const sizeBytes = Number(doc.size_bytes ?? 0);
@@ -636,8 +650,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       const succeeded = results.filter(r => r.status === 'fulfilled').length;
 
       if (succeeded > 0) {
-        await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
-        await queryClient.refetchQueries({ queryKey: ['documents-by-folder', targetFolderId, user?.id ?? 0] });
+        await refreshAfterDocumentsMutation(targetFolderId);
       }
       const failed = files.length - succeeded;
       if (failed === 0) {
@@ -689,9 +702,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         toast: { success: { enabled: true, message: 'Document supprimé' }, error: { enabled: true, message: 'Échec de la suppression' } },
       });
       if (!res.ok) throw new Error('delete_failed');
-      if (typeof selectedDbFolderId === 'number') {
-        await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
-      }
+      await refreshAfterDocumentsMutation();
     } catch {
       // toast already shown by apiFetch
     }
@@ -732,9 +743,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
           toast: { success: { enabled: true, message: 'Document renommé' }, error: { enabled: true, message: "Échec du renommage" } },
         });
         if (!res.ok) throw new Error('rename_failed');
-        if (typeof selectedDbFolderId === 'number') {
-          await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
-        }
+        await refreshAfterDocumentsMutation();
       } catch {
         return;
       } finally {
@@ -856,6 +865,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
         await queryClient.invalidateQueries({ queryKey: ['folders-by-parent', selectedDbFolderId, user?.id ?? 0] });
       }
+      await refreshAfterDocumentsMutation();
       setSelectedDocumentIds([]);
       setSelectedFolderIds([]);
       setSelectionMode(false);
