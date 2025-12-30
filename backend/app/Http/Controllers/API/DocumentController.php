@@ -520,15 +520,16 @@ class DocumentController extends Controller
         }
 
         // Ensure new directory exists
-        Storage::disk('local')->makeDirectory($newDir);
+        $disk = $this->documentsDisk();
+        Storage::disk($disk)->makeDirectory($newDir);
         $newPath = $newDir . '/' . $filename;
 
         try {
-            if ($oldPath !== $newPath && Storage::disk('local')->exists($oldPath)) {
-                Storage::disk('local')->move($oldPath, $newPath);
-            } elseif (!Storage::disk('local')->exists($newPath) && Storage::disk('local')->exists($oldPath)) {
+            if ($oldPath !== $newPath && Storage::disk($disk)->exists($oldPath)) {
+                Storage::disk($disk)->move($oldPath, $newPath);
+            } elseif (!Storage::disk($disk)->exists($newPath) && Storage::disk($disk)->exists($oldPath)) {
                 // same dir but name change
-                Storage::disk('local')->move($oldPath, $newPath);
+                Storage::disk($disk)->move($oldPath, $newPath);
             }
         } catch (\Throwable $e) { /* ignore fs errors */ }
 
@@ -565,10 +566,12 @@ class DocumentController extends Controller
             }
         }
 
+        $disk = $this->documentsDisk();
+
         // Delete file
         try {
-            if ($document->file_path && Storage::disk('local')->exists($document->file_path)) {
-                Storage::disk('local')->delete($document->file_path);
+            if ($document->file_path && Storage::disk($disk)->exists($document->file_path)) {
+                Storage::disk($disk)->delete($document->file_path);
             }
         } catch (\Throwable $e) { /* ignore */ }
 
@@ -609,14 +612,31 @@ class DocumentController extends Controller
 
         $disk = $this->documentsDisk();
 
-        if (!$document->file_path || !Storage::disk($disk)->exists($document->file_path)) {
+        if (!$document->file_path) {
             return response()->json(['message' => 'File not found'], 404);
         }
+
+        // If file not found on configured disk, try common fallbacks.
+        $candidateDisks = array_values(array_unique(array_filter([$disk, 'local', 'public'])));
+        $resolvedDisk = null;
+        foreach ($candidateDisks as $d) {
+            try {
+                if (Storage::disk($d)->exists($document->file_path)) {
+                    $resolvedDisk = $d;
+                    break;
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+        if (!$resolvedDisk) {
+            return response()->json(['message' => 'File not found'], 404);
+        }
+
+        $downloadName = $document->name ?: basename($document->file_path);
         // Resolve absolute path in a cross-platform way
         $fullPath = null;
         try {
-            if (method_exists(Storage::disk($disk), 'path')) {
-                $fullPath = Storage::disk($disk)->path($document->file_path);
+            if (method_exists(Storage::disk($resolvedDisk), 'path')) {
+                $fullPath = Storage::disk($resolvedDisk)->path($document->file_path);
             }
         } catch (\Throwable $e) { $fullPath = null; }
 
@@ -626,12 +646,12 @@ class DocumentController extends Controller
             $detected = @mime_content_type($fullPath) ?: $mime;
             return response()->file($fullPath, [
                 'Content-Type' => $detected,
-                'Content-Disposition' => 'inline; filename="' . basename($fullPath) . '"'
+                'Content-Disposition' => 'attachment; filename="' . $downloadName . '"'
             ]);
         }
 
         // Fallback: stream from storage (works even if absolute path resolution fails on Windows)
-        $stream = Storage::disk($disk)->readStream($document->file_path);
+        $stream = Storage::disk($resolvedDisk)->readStream($document->file_path);
         if ($stream === false) {
             return response()->json(['message' => 'File not found'], 404);
         }
@@ -640,7 +660,7 @@ class DocumentController extends Controller
             if (is_resource($stream)) fclose($stream);
         }, 200, [
             'Content-Type' => $mime,
-            'Content-Disposition' => 'inline; filename="' . basename($document->file_path) . '"'
+            'Content-Disposition' => 'attachment; filename="' . $downloadName . '"'
         ]);
     }
 }
