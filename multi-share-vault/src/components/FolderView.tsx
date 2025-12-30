@@ -206,7 +206,9 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
   });
 
   const refreshAfterDocumentsMutation = async (folderIdToRefresh?: number | null) => {
-    const fid = typeof folderIdToRefresh === 'number' ? folderIdToRefresh : (typeof selectedDbFolderId === 'number' ? selectedDbFolderId : null);
+    const fid = typeof folderIdToRefresh === 'number'
+      ? folderIdToRefresh
+      : (typeof selectedDbFolderId === 'number' ? selectedDbFolderId : null);
     try {
       if (typeof fid === 'number') {
         await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', fid, user?.id ?? 0] });
@@ -214,7 +216,7 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
       }
       // Header recent uploads
       await queryClient.invalidateQueries({ queryKey: ['recent-uploads'] });
-      // Side counters (dashboard)
+      // Side counter
       await queryClient.invalidateQueries({ queryKey: ['documents-count'] });
     } catch { void 0 }
   };
@@ -865,7 +867,6 @@ export const FolderView = ({ folderId, onFolderClick }: FolderViewProps) => {
         await queryClient.invalidateQueries({ queryKey: ['documents-by-folder', selectedDbFolderId, user?.id ?? 0] });
         await queryClient.invalidateQueries({ queryKey: ['folders-by-parent', selectedDbFolderId, user?.id ?? 0] });
       }
-      await refreshAfterDocumentsMutation();
       setSelectedDocumentIds([]);
       setSelectedFolderIds([]);
       setSelectionMode(false);
