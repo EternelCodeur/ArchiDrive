@@ -95,6 +95,7 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
   });
   const { data: visibleServices } = useQuery<Service[]>({
     queryKey: ["visible-services", user?.id ?? 0],
+    enabled: !!user,
     queryFn: async () => {
       const res = await apiFetch(`/api/services/visible`);
       if (!res.ok) throw new Error("Erreur chargement services visibles");
@@ -107,6 +108,7 @@ export const FolderTree = ({ onFolderClick, currentFolderId, externalCollapseId,
     const [isExpanded, setIsExpanded] = useState(false);
     const { data: roots } = useQuery<FolderType[]>({
       queryKey: ['service-root', service.id],
+      enabled: !!user,
       queryFn: async () => {
         const res = await apiFetch(`/api/folders?service_id=${service.id}`);
         if (!res.ok) return [] as FolderType[];

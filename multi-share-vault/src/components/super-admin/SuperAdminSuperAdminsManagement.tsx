@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import type { User } from "@/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const fetchSuperAdmins = async (): Promise<User[]> => {
   const response = await apiFetch(`/api/super-admins`);
@@ -17,9 +18,12 @@ const fetchSuperAdmins = async (): Promise<User[]> => {
 
 export const SuperAdminSuperAdminsManagement = () => {
   const queryClient = useQueryClient();
+  const { user, booting } = useAuth();
+  const enabled = !booting && !!user && user.role === "super_admin";
   const { data: superAdmins = [], isLoading } = useQuery({
     queryKey: ["super-admins"],
     queryFn: fetchSuperAdmins,
+    enabled,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,

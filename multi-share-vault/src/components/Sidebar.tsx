@@ -28,6 +28,7 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
   const canViewAll = user?.role === 'admin' || user?.role === 'super_admin';
   const { data: visibleServices } = useQuery<Service[]>({
     queryKey: ["visible-services", user?.id ?? 0],
+    enabled: !!user,
     queryFn: async () => {
       const res = await apiFetch(`/api/services/visible`);
       if (!res.ok) throw new Error("Erreur chargement services visibles");
@@ -37,6 +38,7 @@ export const Sidebar = ({ onFolderClick, currentFolderId, collapseFolderId, onCl
   });
   const { data: sharedFolders = [] } = useQuery<SharedFolderSummary[]>({
     queryKey: ["shared-folders", user?.id ?? 0],
+    enabled: !!user,
     queryFn: async () => {
       const res = await apiFetch(`/api/shared-folders/visible`);
       if (!res.ok) return [] as SharedFolderSummary[];

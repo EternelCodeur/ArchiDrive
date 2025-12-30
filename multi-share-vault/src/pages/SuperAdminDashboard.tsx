@@ -8,12 +8,16 @@ import { SuperAdminSidebar, SuperAdminTab } from "@/components/super-admin/Super
 import { SuperAdminEnterprisesManagement } from "@/components/super-admin/SuperAdminEnterprisesManagement";
 import { SuperAdminStorageOverview } from "@/components/super-admin/SuperAdminStorageOverview";
 import { SuperAdminSuperAdminsManagement } from "@/components/super-admin/SuperAdminSuperAdminsManagement";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SuperAdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<SuperAdminTab>("dashboard");
+  const { user, booting } = useAuth();
+  const enabled = !booting && !!user && user.role === "super_admin";
   type Enterprise = { id: number; name: string; admin_name: string; email: string; storage: number };
   const { data: enterprises = [], isLoading: enterprisesLoading } = useQuery<Enterprise[]>({
     queryKey: ["enterprises"],
+    enabled,
     queryFn: async () => {
       const res = await apiFetch("/api/enterprises");
       if (!res.ok) throw new Error("Erreur lors du chargement des entreprises");
@@ -22,6 +26,7 @@ const SuperAdminDashboard = () => {
   });
   const { data: overview } = useQuery<{ id: number; total_capacity: number; used_storage: number } | null>({
     queryKey: ["super-admin-storage-overview"],
+    enabled,
     queryFn: async () => {
       const res = await apiFetch("/api/super-admin-storage-overviews");
       if (!res.ok) return null;
@@ -30,6 +35,7 @@ const SuperAdminDashboard = () => {
   });
   const { data: superAdmins = [] } = useQuery<Array<{ id: number }>>({
     queryKey: ["super-admins"],
+    enabled,
     queryFn: async () => {
       const res = await apiFetch("/api/super-admins");
       if (!res.ok) throw new Error("Erreur lors du chargement des super administrateurs");
@@ -45,6 +51,7 @@ const SuperAdminDashboard = () => {
   };
   const { data: stats } = useQuery<Stats>({
     queryKey: ["stats"],
+    enabled,
     queryFn: async () => {
       const res = await apiFetch("/api/stats");
       if (!res.ok) throw new Error("Erreur lors du chargement des statistiques");

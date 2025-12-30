@@ -27,6 +27,40 @@ class DocumentController extends Controller
         return $disk !== '' ? $disk : 'local';
     }
 
+    private function syncToPublicDisk(string $sourceDisk, string $relativePath): void
+    {
+        if ($relativePath === '') return;
+        // If the source disk is already public, nothing to do.
+        if ($sourceDisk === 'public') return;
+
+        try {
+            if (!Storage::disk($sourceDisk)->exists($relativePath)) return;
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        try {
+            Storage::disk('public')->makeDirectory(trim(dirname($relativePath), '/\\'));
+        } catch (\Throwable $e) { /* ignore */ }
+
+        try {
+            $stream = Storage::disk($sourceDisk)->readStream($relativePath);
+            if ($stream === false) return;
+            Storage::disk('public')->writeStream($relativePath, $stream);
+            if (is_resource($stream)) fclose($stream);
+        } catch (\Throwable $e) { /* ignore */ }
+    }
+
+    private function deleteFromPublicDisk(string $relativePath): void
+    {
+        if ($relativePath === '') return;
+        try {
+            if (Storage::disk('public')->exists($relativePath)) {
+                Storage::disk('public')->delete($relativePath);
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+    }
+
     private function buildBaseEnterprisePath(int $serviceId): string
     {
         $base = 'enterprises/entreprise';
@@ -368,6 +402,9 @@ class DocumentController extends Controller
         Storage::disk($disk)->putFileAs($fullDir, $uploaded, $finalName);
         $relPath = $fullDir . '/' . $finalName;
 
+        // Also sync to the public disk for local visibility under storage/app/public/...
+        $this->syncToPublicDisk($disk, $relPath);
+
         $doc = Document::create([
             'name' => $original,
             'folder_id' => $folder?->id,
@@ -533,6 +570,26 @@ class DocumentController extends Controller
             }
         } catch (\Throwable $e) { /* ignore fs errors */ }
 
+        // Keep the public disk copy in sync
+        try {
+            if ($oldPath && $newPath && $oldPath !== $newPath) {
+                // If there is an old public copy, move it; otherwise (or if move fails), re-sync from source disk.
+                if (Storage::disk('public')->exists($oldPath)) {
+                    try {
+                        Storage::disk('public')->makeDirectory(trim(dirname($newPath), '/\\'));
+                    } catch (\Throwable $e) { /* ignore */ }
+                    try {
+                        Storage::disk('public')->move($oldPath, $newPath);
+                    } catch (\Throwable $e) {
+                        $this->deleteFromPublicDisk($oldPath);
+                        $this->syncToPublicDisk($disk, $newPath);
+                    }
+                } else {
+                    $this->syncToPublicDisk($disk, $newPath);
+                }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+
         // Persist
         $document->folder_id = $targetFolder?->id;
         $document->file_path = $newPath;
@@ -574,6 +631,11 @@ class DocumentController extends Controller
                 Storage::disk($disk)->delete($document->file_path);
             }
         } catch (\Throwable $e) { /* ignore */ }
+
+        // Also delete from public disk for local visibility sync
+        if ($document->file_path) {
+            $this->deleteFromPublicDisk($document->file_path);
+        }
 
         $document->delete();
         return response()->json(null, Response::HTTP_NO_CONTENT);

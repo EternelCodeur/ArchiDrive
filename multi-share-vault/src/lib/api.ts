@@ -2,16 +2,31 @@ import { toast } from 'sonner';
 
 const API_BASE_URL: string = (() => {
   try {
+    const isLocalHost = (() => {
+      try {
+        const host = (typeof window !== 'undefined' && window.location && window.location.hostname)
+          ? String(window.location.hostname)
+          : '';
+        if (!host) return false;
+        if (host === 'localhost') return true;
+        if (host === '127.0.0.1') return true;
+        // Any 127.x.x.x loopback
+        if (host.startsWith('127.')) return true;
+        return false;
+      } catch {
+        return false;
+      }
+    })();
     const env = (import.meta as any)?.env as Record<string, any> | undefined;
     const isDev = Boolean(env?.DEV);
-    if (isDev) return '';
     const fromEnv = (env?.VITE_API_BASE_URL as string | undefined)
       || (env?.VITE_API_URL as string | undefined)
       || '';
+    if (isDev || isLocalHost) return '';
     if (fromEnv && String(fromEnv).trim().length > 0) return String(fromEnv).trim();
-    return 'https://api.archi-drive.ga';
+    return 'http://127.0.0.1:8000';
   } catch {
-    return 'https://api.archi-drive.ga';
+    return 'http://127.0.0.1:8000';
   }
 })();
 

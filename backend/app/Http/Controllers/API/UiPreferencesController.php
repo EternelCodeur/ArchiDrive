@@ -13,8 +13,14 @@ class UiPreferencesController extends Controller
     public function show(Request $request)
     {
         $user = Auth::user();
-        if (!$user || !$user->enterprise_id) {
-            return response()->json(['message' => 'Forbidden'], Response::HTTP_FORBIDDEN);
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+        }
+        if (!$user->enterprise_id) {
+            return response()->json([
+                'ui_theme' => 'light',
+                'ui_accent_color' => 'blue',
+            ]);
         }
         $ent = Enterprise::find($user->enterprise_id);
         if (!$ent) {

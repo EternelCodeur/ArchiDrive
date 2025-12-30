@@ -25,6 +25,7 @@ export const FolderTabs = ({
   const { user } = useAuth();
   const { data: visibleServices } = useQuery<Service[]>({
     queryKey: ["visible-services", user?.id ?? 0],
+    enabled: !!user,
     queryFn: async () => {
       const res = await apiFetch(`/api/services/visible`);
       if (!res.ok) throw new Error("Erreur chargement services visibles");

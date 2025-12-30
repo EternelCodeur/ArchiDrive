@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface StorageOverviewApi {
   id: number;
@@ -14,10 +15,13 @@ interface StorageOverviewApi {
 
 export const SuperAdminStorageOverview = () => {
   const queryClient = useQueryClient();
+  const { user, booting } = useAuth();
+  const enabled = !booting && !!user && user.role === "super_admin";
   const [totalCapacityInput, setTotalCapacityInput] = useState("0");
 
   const { data: overview, isLoading } = useQuery<StorageOverviewApi | null>({
     queryKey: ["super-admin-storage-overview"],
+    enabled,
     queryFn: async () => {
       const res = await apiFetch("/api/super-admin-storage-overviews");
       if (!res.ok) {

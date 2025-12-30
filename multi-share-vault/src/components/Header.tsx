@@ -31,7 +31,7 @@ export const Header = ({
   onOpenMobileSidebar?: () => void;
   currentFolderId?: number | null;
 }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, booting } = useAuth();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const handleLogout = async () => {
@@ -57,7 +57,7 @@ export const Header = ({
 
   const { data: recentUploads = [], isLoading: isRecentLoading } = useQuery<RecentUpload[]>({
     queryKey: ["recent-uploads", user?.id ?? 0, currentFolderId ?? null],
-    enabled: !!user,
+    enabled: !!user && !booting,
     queryFn: async () => {
       const qs = new URLSearchParams();
       qs.set('limit', '5');
