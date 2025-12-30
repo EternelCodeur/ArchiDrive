@@ -8,7 +8,7 @@ const API_BASE_URL: string = (() => {
           ? String(window.location.hostname)
           : '';
         if (!host) return false;
-        if (host === 'api.archi-drive.ga') return true;
+        if (host === 'localhost') return true;
         if (host === '127.0.0.1') return true;
         // Any 127.x.x.x loopback
         if (host.startsWith('127.')) return true;
