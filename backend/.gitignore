@@ -15,13 +15,13 @@
 /node_modules
 /public/hot
 /vendor
-/storage/*
-!/storage/app/
-/storage/app/*
-!/storage/app/public/
-!/storage/app/public/**
-!/storage/app/private/
-!/storage/app/private/**
+ /storage/*
+ !/storage/app/
+ /storage/app/*
+ !/storage/app/public/
+ !/storage/app/public/**
+ !/storage/app/private/
+ !/storage/app/private/**
 Homestead.json
 Homestead.yaml
 Thumbs.db
