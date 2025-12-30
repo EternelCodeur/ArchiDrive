@@ -8,7 +8,7 @@ const API_BASE_URL: string = (() => {
           ? String(window.location.hostname)
           : '';
         if (!host) return false;
-        if (host === 'localhost') return true;
+        if (host === 'api.archi-drive.ga') return true;
         if (host === '127.0.0.1') return true;
         // Any 127.x.x.x loopback
         if (host.startsWith('127.')) return true;
@@ -24,9 +24,9 @@ const API_BASE_URL: string = (() => {
       || '';
     if (isDev || isLocalHost) return '';
     if (fromEnv && String(fromEnv).trim().length > 0) return String(fromEnv).trim();
-    return 'http://127.0.0.1:8000';
+    return 'https://api.archi-drive.ga';
   } catch {
-    return 'http://127.0.0.1:8000';
+    return 'https://api.archi-drive.ga';
   }
 })();
 
